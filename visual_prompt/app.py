@@ -67,8 +67,6 @@ def build_english_prompt_skeleton(
     answers: dict[str, list[dict[str, str]]],
     custom_inputs: dict[str, str],
 ) -> str:
-    by_id = {q["id"]: q for q in QUESTION_BANK}
-
     def pick_label(qid: str) -> str:
         selected = answers.get(qid, [])
         return selected[0]["label"] if selected else ""
@@ -115,8 +113,6 @@ def build_english_prompt_skeleton(
         "Write one concise production-ready prompt in English, then provide a shorter variant optimized for image-to-image tools.",
     ]
 
-    # Avoid unused warning in static checks while keeping readable intent.
-    _ = by_id
     return "\n".join(lines)
 
 
