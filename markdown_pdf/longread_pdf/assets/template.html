@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="{{LANG}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <base href="{{BASE_URL}}">
+  <title>{{TITLE}}</title>
+  <style>{{CSS}}</style>
+</head>
+<body class="mode-{{MODE}}" data-running-title="{{SHORT_TITLE}}">
+  <section class="cover" aria-label="封面">
+    <div class="cover-content">
+      <h1>{{TITLE}}</h1>
+      <div class="cover-deck">{{DECK}}</div>
+    </div>
+    <p class="cover-meta">阅读版 · {{DATE}}</p>
+  </section>
+  <nav class="toc-page" aria-label="目录">
+    <h1>目录</h1>
+    <ol class="toc">{{TOC}}</ol>
+  </nav>
+  <main class="longread">{{CONTENT}}</main>
+</body>
+</html>
