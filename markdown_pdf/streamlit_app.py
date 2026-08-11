@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 
 import streamlit as st
 
-from longread_pdf import RenderError, preflight_markdown, render_markdown
+from longread_pdf import GPT_MARKDOWN_PROMPT, RenderError, preflight_markdown, render_markdown
 
 
 SAMPLE = """# 一份适合长时间阅读的 Markdown
@@ -51,6 +52,52 @@ def safe_filename(value: str) -> str:
     return (cleaned or "longread")[:100]
 
 
+def copy_prompt_button(value: str) -> None:
+    prompt_json = json.dumps(value, ensure_ascii=False)
+    st.iframe(
+        f"""
+        <button id="copy-prompt" type="button">复制 GPT Markdown 格式要求</button>
+        <script>
+          const button = document.getElementById("copy-prompt");
+          const prompt = {prompt_json};
+          async function copyPrompt() {{
+            try {{
+              await navigator.clipboard.writeText(prompt);
+            }} catch (error) {{
+              const area = document.createElement("textarea");
+              area.value = prompt;
+              area.style.position = "fixed";
+              area.style.opacity = "0";
+              document.body.appendChild(area);
+              area.select();
+              document.execCommand("copy");
+              area.remove();
+            }}
+            button.textContent = "已复制";
+            window.setTimeout(() => {{ button.textContent = "复制 GPT Markdown 格式要求"; }}, 1600);
+          }}
+          button.addEventListener("click", copyPrompt);
+        </script>
+        <style>
+          body {{ margin: 0; background: transparent; }}
+          button {{
+            min-height: 38px;
+            padding: 0 14px;
+            border: 1px solid #d8d8d8;
+            border-radius: 6px;
+            background: #fff;
+            color: #252525;
+            font: 500 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            cursor: pointer;
+          }}
+          button:hover {{ border-color: #9a9a9a; }}
+        </style>
+        """,
+        width="content",
+        height=42,
+    )
+
+
 @st.cache_data(show_spinner=False, max_entries=8)
 def generate(markdown_source: str, mode: str, short_title: str):
     return render_markdown(markdown_source, mode=mode, short_title=short_title)
@@ -69,6 +116,8 @@ st.markdown(
     '<p class="intro">把中英文 Markdown 排成克制、易读的长文 PDF。无需账号、无需 API；文稿只在当前 Streamlit 会话中处理。</p>',
     unsafe_allow_html=True,
 )
+
+copy_prompt_button(GPT_MARKDOWN_PROMPT)
 
 uploaded = st.file_uploader("上传 Markdown", type=["md", "markdown", "txt"], max_upload_size=5)
 if uploaded is not None:

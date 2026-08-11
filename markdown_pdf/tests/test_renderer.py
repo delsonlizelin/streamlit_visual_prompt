@@ -1,10 +1,18 @@
 import unittest
 
 from longread_pdf.preflight import preflight_markdown
+from longread_pdf.gpt_prompt import GPT_MARKDOWN_PROMPT
 from longread_pdf.renderer import build_document, normalize_markdown
 
 
 class RendererTests(unittest.TestCase):
+    def test_gpt_prompt_contains_renderer_contract(self):
+        self.assertIn("第一行必须是全文唯一的一级标题", GPT_MARKDOWN_PROMPT)
+        self.assertIn("不要使用原始 HTML", GPT_MARKDOWN_PROMPT)
+        self.assertIn("不要用三个反引号把整篇文章包起来", GPT_MARKDOWN_PROMPT)
+        self.assertNotIn("填写主题", GPT_MARKDOWN_PROMPT)
+        self.assertNotIn("推荐结构", GPT_MARKDOWN_PROMPT)
+
     def test_normalize_emphasis_moves_terminal_punctuation(self):
         normalized, changes = normalize_markdown("这是**重点。**")
         self.assertEqual(normalized, "这是**重点**。")
