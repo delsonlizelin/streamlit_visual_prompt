@@ -6,19 +6,24 @@ import re
 import streamlit as st
 
 
-def page_navigation() -> None:
-    """Render stable labels for the two lightweight app pages."""
-    with st.sidebar:
-        st.page_link(
-            "streamlit_app.py",
-            label="Markdown PDF",
-            icon=":material/picture_as_pdf:",
-        )
-        st.page_link(
-            "pages/2_文章摘要.py",
-            label="文章摘要",
+def page_navigation(current: str) -> None:
+    """Render one compact top-level control to the app's other page."""
+    if current == "pdf":
+        if st.button(
+            "切换到文章摘要",
             icon=":material/summarize:",
-        )
+            key="open_summary_page",
+        ):
+            st.switch_page("pages/2_文章摘要.py")
+    elif current == "summary":
+        if st.button(
+            "返回 Markdown PDF",
+            icon=":material/arrow_back:",
+            key="open_pdf_page",
+        ):
+            st.switch_page("streamlit_app.py")
+    else:
+        raise ValueError(f"Unknown page: {current}")
 
 
 def clipboard_button(value: str, label: str, *, key: str) -> None:

@@ -43,6 +43,7 @@ class SummarizerTests(unittest.TestCase):
         self.assertIn("不裸露长 URL", messages[0]["content"])
         self.assertIn("不要输出检查过程", messages[0]["content"])
         self.assertIn("分章节摘要", messages[1]["content"])
+        self.assertIn("每节只列 1 到 2 条", messages[1]["content"])
         self.assertIn("使用简体中文", messages[1]["content"])
         self.assertIn("<document>", messages[1]["content"])
 
@@ -88,6 +89,7 @@ class SummarizerTests(unittest.TestCase):
         self.assertEqual(body["model"], DEFAULT_MODEL)
         self.assertEqual(body["thinking"], {"type": "disabled"})
         self.assertEqual(body["response_format"], {"type": "json_object"})
+        self.assertEqual(body["max_tokens"], 1800)
         self.assertFalse(body["stream"])
         self.assertEqual(result.summary, "# 摘要\n\n- 保留重要事实。")
         self.assertEqual(result.prompt_tokens, 42)

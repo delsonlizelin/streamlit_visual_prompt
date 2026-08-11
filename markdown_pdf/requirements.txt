@@ -2,3 +2,4 @@ streamlit[pdf]==1.60.0
 playwright==1.62.0
 Markdown==3.10.2
 bleach==6.2.0
+pypdf==6.15.0

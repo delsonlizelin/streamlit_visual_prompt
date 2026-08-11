@@ -50,10 +50,10 @@ MODE_PROFILES = {
     },
 }
 LONG_IMAGE_PROFILES = {
-    "tablet": {"viewport_width": 500, "device_scale_factor": 2},
-    "mobile": {"viewport_width": 409, "device_scale_factor": 2},
+    "tablet": {"viewport_width": 500, "device_scale_factor": 3},
+    "mobile": {"viewport_width": 409, "device_scale_factor": 3},
 }
-MAX_LONG_IMAGE_CSS_HEIGHT = 16_000
+MAX_LONG_IMAGE_CSS_HEIGHT = 10_500
 
 ALLOWED_TAGS = {
     "p", "h2", "h3", "h4", "h5", "h6", "blockquote", "strong", "em",

@@ -1,6 +1,6 @@
 # Markdown PDF
 
-一个轻量的双页面 Streamlit 应用：把中文、英文或双语 Markdown 转成适合长时间阅读的 PDF，或生成忠实、可下载的文章摘要。
+一个轻量的双页面 Streamlit 应用：把中文、英文或双语 Markdown 转成适合长时间阅读的 PDF，或从 Markdown、TXT、普通文本型 PDF 生成忠实、可下载的文章摘要。两个页面使用顶部的单一按钮切换，不依赖侧边栏，在手机窄屏上也不会隐藏入口。
 
 PDF 页面提供三种确定性版式：
 
@@ -30,21 +30,24 @@ PDF 页面提供三种确定性版式：
 
 独立的“文章摘要”页面支持上传或粘贴 Markdown，并提供：
 
-- 简短摘要、标准摘要、分章节摘要；
+- 上传 Markdown、UTF-8 TXT 和普通文本型 PDF，或直接粘贴内容；
+- 快速概览、核心摘要、分章节摘要三种方式；
 - 跟随原文、简体中文、English 三种输出语言；
 - 一键复制、下载 Markdown，或把摘要直接发送到 Markdown PDF 页面；
 - 生成 Desktop、Tablet、Mobile 三种紧凑摘要 PDF；
-- 生成 Tablet 或 Mobile 连续 PNG 长图；
+- 生成 Tablet 或 Mobile 的 3× 连续高清 PNG 长图；
 - 保留重要数字、日期、名称、限制条件、因果关系和否定表达；
 - 把文档与系统指令分隔，降低文稿中提示词注入内容的影响。
 
-摘要页首版只使用 DeepSeek Chat Completions API。请求使用 JSON 输出，单篇上限为 30 万字符；未配置 Key 时页面仍能打开和编辑，但生成按钮会禁用。提示词要求中性、直接和高信息密度，并限制模型只输出当前 PDF 渲染器稳定支持的 Markdown。原文没有明确结论时，模型不得替作者补出结论。
+上传文件后，下载文件名默认继承原文件名；直接粘贴时仍使用 `summary` 或 `longread`。生成完成后，页面按“下载 → 预览 → 编辑”的顺序展示，不需要先越过大编辑框。摘要页首版只使用 DeepSeek Chat Completions API。请求使用 JSON 输出，单篇上限为 30 万字符；未配置 Key 时页面仍能打开和编辑，但生成按钮会禁用。点击生成即表示同意把当前输入发送到 DeepSeek，不再提供重复确认框。
+
+提示词要求中性、直接和高信息密度：快速概览为 3–5 句无列表短文；核心摘要提供一个明确结论和 3–5 个不重复要点；分章节摘要每节限制 1–2 个要点。只有原文存在实质性限制时才添加“限制与例外”，也不会把作者观点、推测写成已证实事实。输出只使用当前 PDF 渲染器稳定支持的 Markdown；原文没有明确结论时，模型不得替作者补出结论。
 
 PDF 使用没有封面和目录的紧凑摘要模板。长图沿用 Tablet / Mobile 的字体、行宽与段落节奏，把分页改成一张连续图片；如果摘要长到超过 Chromium 的稳定单图高度，页面会提示改用 PDF 或 Markdown。
 
 ## API 与隐私
 
-PDF 转换完全在 Streamlit 应用的运行环境中完成，不调用 DeepSeek、OpenAI 或其他模型服务。只有点击摘要页的“生成摘要”后，正文才会发送到 DeepSeek。
+PDF 转换和上传 PDF 的文字提取完全在 Streamlit 应用的运行环境中完成，不调用 DeepSeek、OpenAI 或其他模型服务。只有点击摘要页的“生成摘要”后，正文才会发送到 DeepSeek。
 
 本地开发时，复制示例文件并填写自己的 Key：
 
@@ -70,6 +73,7 @@ Python 依赖写在 `requirements.txt`：
 - `streamlit[pdf]`：界面、上传、PDF 预览与下载；
 - `Markdown`：Markdown 解析；
 - `bleach`：清理上传内容中的不安全 HTML；
+- `pypdf`：从普通文本型 PDF 提取带页面顺序的可编辑文本；
 - `playwright`：控制 Chromium 生成带 CSS 分页的 PDF。
 
 摘要请求使用 Python 标准库发送，没有引入 DeepSeek SDK 或额外 AI 框架。
@@ -118,7 +122,7 @@ python scripts/smoke_test.py
 python scripts/summary_export_smoke_test.py
 ```
 
-第一组冒烟测试会用同一份中英文回归文稿生成 A4、Tablet 和 9:16 三份长文 PDF。第二组会生成三种紧凑摘要 PDF，以及 Tablet / Mobile 两张长图；检测到空白页、正文溢出或异常图片尺寸时会失败。
+第一组冒烟测试会用同一份中英文回归文稿生成 A4、Tablet 和 9:16 三份长文 PDF。第二组会生成三种紧凑摘要 PDF、Tablet / Mobile 两张高清长图，并把生成的 PDF 重新导入以验证文字提取；检测到空白页、正文溢出、解析失败或异常图片尺寸时会失败。
 
 ## 后续版本
 

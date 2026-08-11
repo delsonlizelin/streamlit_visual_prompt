@@ -5,6 +5,7 @@ import re
 
 import streamlit as st
 
+from input_documents import InputDocumentError, extract_uploaded_document
 from longread_pdf import RenderError, render_summary_long_image, render_summary_pdf
 from summarizer import (
     DEFAULT_BASE_URL,
@@ -20,7 +21,7 @@ SAMPLE = """# 一份等待摘要的长文
 
 ## 背景
 
-把 Markdown 粘贴到这里，选择摘要方式后生成结果。
+把 Markdown、TXT 或普通文本型 PDF 上传到这里，也可以直接粘贴文字。
 
 ## 结论
 
@@ -58,19 +59,23 @@ st.markdown(
       :root { --ink: #252525; --muted: #6f6f6f; --rule: #dedede; }
       .stApp { color: var(--ink); }
       [data-testid="stHeader"] { background: rgba(255,255,255,.92); }
-      .block-container { max-width: 1240px; padding-top: 2.2rem; padding-bottom: 4rem; }
+      .block-container { max-width: 1240px; padding-top: 1.5rem; padding-bottom: 4rem; }
       h1 { letter-spacing: -.025em; }
-      .intro { max-width: 760px; color: var(--muted); font-size: 1.02rem; line-height: 1.7; margin-bottom: 1.4rem; }
+      .intro { max-width: 780px; color: var(--muted); font-size: 1.02rem; line-height: 1.7; margin-bottom: 1.2rem; }
+      [data-testid="stFileUploader"] { border: 1px solid var(--rule); border-radius: .45rem; padding: .35rem .65rem; }
+      [data-testid="stMetric"] { border-top: 1px solid var(--rule); padding-top: .65rem; }
       .stButton button, .stDownloadButton button { border-radius: .35rem; }
       footer { visibility: hidden; }
     </style>
     """,
     unsafe_allow_html=True,
 )
-page_navigation()
+page_navigation("summary")
 
 if "summary_markdown_source" not in st.session_state:
     st.session_state.summary_markdown_source = SAMPLE
+if "summary_output_name" not in st.session_state:
+    st.session_state.summary_output_name = "summary"
 
 api_key = secret_value("DEEPSEEK_API_KEY")
 model = secret_value("DEEPSEEK_MODEL", DEFAULT_MODEL)
@@ -78,105 +83,65 @@ base_url = secret_value("DEEPSEEK_BASE_URL", DEFAULT_BASE_URL)
 
 st.title("文章摘要")
 st.markdown(
-    '<p class="intro">上传或粘贴 Markdown，生成简短、标准或分章节摘要。PDF 转换页面不受 API 配置影响。</p>',
+    '<p class="intro">上传 Markdown、TXT 或普通文本型 PDF，生成结构清楚、可以直接下载和分享的摘要。</p>',
     unsafe_allow_html=True,
 )
 
 if not api_key:
     st.info("尚未配置 DeepSeek API Key。页面可以编辑，但生成按钮暂不可用。")
 
-uploaded = st.file_uploader("上传 Markdown", type=["md", "markdown", "txt"], max_upload_size=5)
-if uploaded is not None:
-    payload = uploaded.getvalue()
-    digest = hashlib.sha256(payload).hexdigest()
-    if st.session_state.get("summary_uploaded_digest") != digest:
-        try:
-            st.session_state.summary_markdown_source = payload.decode("utf-8-sig")
-            st.session_state.summary_uploaded_digest = digest
-        except UnicodeDecodeError:
-            st.error("文件不是 UTF-8 编码。请先转换编码后再上传。")
-
-editor, settings = st.columns([1.55, 1], gap="large")
-with editor:
-    markdown_source = st.text_area(
-        "Markdown 内容",
-        key="summary_markdown_source",
-        height=560,
-    )
-
-with settings:
-    st.subheader("摘要方式")
-    mode_options = {
-        "简短摘要": "brief",
-        "标准摘要": "standard",
-        "分章节摘要": "section",
-    }
-    mode_label = st.radio("摘要模式", list(mode_options), label_visibility="collapsed")
-    language_options = {
-        "跟随原文": "source",
-        "简体中文": "zh",
-        "English": "en",
-    }
-    language_label = st.selectbox("输出语言", list(language_options))
-    output_name = st.text_input("下载文件名", value="summary")
-    consent = st.checkbox("我知道正文将发送到 DeepSeek API 进行摘要。")
-
-    generate_clicked = st.button(
-        "生成摘要",
-        type="primary",
-        icon=":material/summarize:",
-        width="stretch",
-        disabled=not api_key,
-    )
-
-    if generate_clicked:
-        if not markdown_source.strip():
-            st.error("请先输入 Markdown 内容。")
-        elif len(markdown_source) > MAX_SOURCE_CHARACTERS:
-            st.error(f"文稿超过 {MAX_SOURCE_CHARACTERS // 10_000} 万字符，请拆分后再摘要。")
-        elif not consent:
-            st.error("请先确认正文将发送到 DeepSeek API。")
-        else:
-            try:
-                with st.spinner("正在生成摘要…"):
-                    st.session_state.summary_result = summarize_markdown(
-                        markdown_source,
-                        mode=mode_options[mode_label],
-                        language=language_options[language_label],
-                        api_key=api_key,
-                        model=model,
-                        base_url=base_url,
-                    )
-                    st.session_state.pop("summary_export", None)
-                st.success("摘要已生成。")
-            except SummaryError as error:
-                st.error(str(error))
-            except Exception:
-                st.error("摘要生成失败，请查看 Streamlit Cloud 日志。")
-
 result = st.session_state.get("summary_result")
-if result:
-    st.divider()
-    st.subheader("摘要结果")
-    metrics = st.columns(3)
-    metrics[0].metric("模型", result.model)
-    metrics[1].metric("输出 Tokens", result.completion_tokens or "—")
-    metrics[2].metric("用时", f"{result.milliseconds / 1000:.1f}s")
+summary_digest = (
+    hashlib.sha256(result.summary.encode("utf-8")).hexdigest() if result else ""
+)
+export = st.session_state.get("summary_export")
+valid_export = bool(export and export.get("digest") == summary_digest)
 
-    copy_col, markdown_col, pdf_page_col = st.columns(3, gap="medium")
+if result:
+    st.success("摘要已生成，下载入口已放在最前面。", icon=":material/check_circle:")
+    st.download_button(
+        "下载 Markdown",
+        data=result.summary.encode("utf-8"),
+        file_name=f"{safe_filename(st.session_state.summary_output_name)}.md",
+        mime="text/markdown",
+        type="primary",
+        icon=":material/download:",
+        width="stretch",
+        on_click="ignore",
+    )
+
+    if valid_export:
+        artifact = export["artifact"]
+        if export["kind"] == "pdf":
+            st.download_button(
+                f"下载 {export['mode']} PDF",
+                data=artifact.pdf,
+                file_name=(
+                    f"{safe_filename(st.session_state.summary_output_name)}."
+                    f"summary.{export['mode']}.pdf"
+                ),
+                mime="application/pdf",
+                icon=":material/download:",
+                width="stretch",
+                on_click="ignore",
+            )
+        else:
+            st.download_button(
+                f"下载 {export['mode']} PNG 长图",
+                data=artifact.png,
+                file_name=(
+                    f"{safe_filename(st.session_state.summary_output_name)}."
+                    f"summary.{export['mode']}.png"
+                ),
+                mime="image/png",
+                icon=":material/download:",
+                width="stretch",
+                on_click="ignore",
+            )
+
+    copy_col, pdf_page_col = st.columns(2, gap="medium")
     with copy_col:
         clipboard_button(result.summary, "复制摘要", key="summary-result")
-    with markdown_col:
-        st.download_button(
-            "下载 Markdown",
-            data=result.summary.encode("utf-8"),
-            file_name=f"{safe_filename(output_name)}.md",
-            mime="text/markdown",
-            type="primary",
-            icon=":material/download:",
-            width="stretch",
-            on_click="ignore",
-        )
     with pdf_page_col:
         if st.button(
             "发送到 Markdown PDF",
@@ -184,17 +149,24 @@ if result:
             width="stretch",
         ):
             st.session_state.markdown_source = result.summary
+            st.session_state.pdf_output_name = st.session_state.summary_output_name
             st.session_state.pop("render_result", None)
+            st.session_state.pop("render_source_digest", None)
             st.switch_page("streamlit_app.py")
 
-    st.markdown(result.summary)
+    metrics = st.columns(3)
+    metrics[0].metric("模型", result.model)
+    metrics[1].metric("输出 Tokens", result.completion_tokens or "—")
+    metrics[2].metric("用时", f"{result.milliseconds / 1000:.1f}s")
 
-    st.divider()
-    st.subheader("导出 PDF 或长图")
-    st.caption("直接生成紧凑摘要 PDF，或使用 Tablet / Mobile 阅读版式生成一张连续 PNG 长图。")
+    with st.expander("预览摘要", icon=":material/preview:"):
+        st.markdown(result.summary)
+
+    st.subheader("生成 PDF 或长图")
+    st.caption("选择格式后生成；生成完成的下载按钮会自动出现在页面顶部。")
     export_kind_label = st.radio(
         "导出格式",
-        ["PDF", "长图 PNG"],
+        ["PDF", "高清长图 PNG"],
         horizontal=True,
         key="summary_export_kind",
     )
@@ -216,7 +188,6 @@ if result:
         key=f"summary_export_mode_{export_kind_label}",
     )
     export_mode = export_mode_options[export_mode_label]
-    summary_digest = hashlib.sha256(result.summary.encode("utf-8")).hexdigest()
 
     if st.button(
         "生成导出文件",
@@ -238,57 +209,148 @@ if result:
                     "mode": export_mode,
                     "artifact": artifact,
                 }
-            st.success("导出文件已生成。")
+            st.rerun()
         except RenderError as error:
             st.error(str(error))
         except Exception:
             st.error("导出失败，请查看 Streamlit Cloud 日志。")
 
-    export = st.session_state.get("summary_export")
-    expected_kind = "pdf" if export_kind_label == "PDF" else "image"
-    if (
-        export
-        and export["digest"] == summary_digest
-        and export["kind"] == expected_kind
-        and export["mode"] == export_mode
-    ):
+    if valid_export:
         artifact = export["artifact"]
-        if expected_kind == "pdf":
-            st.caption(f"{artifact.pages} 页 · {artifact.milliseconds / 1000:.1f} 秒")
-            st.download_button(
-                "下载 PDF",
-                data=artifact.pdf,
-                file_name=f"{safe_filename(output_name)}.summary.{export_mode}.pdf",
-                mime="application/pdf",
-                type="primary",
-                icon=":material/download:",
-                width="stretch",
-                on_click="ignore",
-            )
-            st.pdf(artifact.pdf, height=720)
-        else:
-            st.caption(
-                f"{artifact.width} × {artifact.height} px · "
-                f"{artifact.milliseconds / 1000:.1f} 秒"
-            )
-            st.download_button(
-                "下载 PNG 长图",
-                data=artifact.png,
-                file_name=f"{safe_filename(output_name)}.summary.{export_mode}.png",
-                mime="image/png",
-                type="primary",
-                icon=":material/download:",
-                width="stretch",
-                on_click="ignore",
-            )
-            st.image(artifact.png, caption=f"{export_mode_label}预览", width="stretch")
+        with st.expander("预览最近生成的导出文件", icon=":material/preview:"):
+            if export["kind"] == "pdf":
+                st.caption(f"{artifact.pages} 页 · {artifact.milliseconds / 1000:.1f} 秒")
+                st.pdf(artifact.pdf, height=700)
+            else:
+                st.caption(
+                    f"{artifact.width} × {artifact.height} px · "
+                    f"{artifact.milliseconds / 1000:.1f} 秒"
+                )
+                st.image(artifact.png, caption="长图预览", width="stretch")
 
-with st.expander("API 与隐私"):
+current_source_digest = hashlib.sha256(
+    st.session_state.summary_markdown_source.encode("utf-8")
+).hexdigest()
+if result and st.session_state.get("summary_source_digest") != current_source_digest:
+    st.info("输入内容已经修改；上方摘要仍是上一次生成的版本。请重新生成以更新结果。")
+
+input_panel = (
+    st.expander("编辑输入或重新生成", icon=":material/edit:")
+    if result
+    else st.container()
+)
+with input_panel:
+    uploaded = st.file_uploader(
+        "上传 Markdown、TXT 或 PDF",
+        type=["md", "markdown", "txt", "pdf"],
+        max_upload_size=20,
+    )
+    if uploaded is not None:
+        payload = uploaded.getvalue()
+        digest = hashlib.sha256(payload).hexdigest()
+        if st.session_state.get("summary_uploaded_digest") != digest:
+            try:
+                with st.spinner("正在读取文件…"):
+                    document = extract_uploaded_document(uploaded.name, payload)
+                st.session_state.summary_markdown_source = document.text
+                st.session_state.summary_output_name = document.stem
+                st.session_state.summary_uploaded_digest = digest
+                st.session_state.summary_input_meta = {
+                    "kind": document.kind,
+                    "pages": document.pages,
+                    "characters": len(document.text),
+                }
+                st.session_state.pop("summary_result", None)
+                st.session_state.pop("summary_export", None)
+                st.session_state.pop("summary_source_digest", None)
+                st.rerun()
+            except InputDocumentError as error:
+                st.error(str(error))
+
+    input_meta = st.session_state.get("summary_input_meta")
+    if input_meta:
+        page_note = f" · {input_meta['pages']} 页" if input_meta["pages"] else ""
+        st.caption(
+            f"已读取 {input_meta['kind']}{page_note} · "
+            f"{input_meta['characters']:,} 字符"
+        )
+
+    editor, settings = st.columns([1.55, 1], gap="large")
+    with editor:
+        markdown_source = st.text_area(
+            "输入内容",
+            key="summary_markdown_source",
+            height=500,
+            help="PDF 会先提取为可编辑文本；扫描版 PDF 需要先进行 OCR。",
+        )
+
+    with settings:
+        st.subheader("摘要方式")
+        mode_options = {
+            "快速概览": "brief",
+            "核心摘要": "standard",
+            "分章节摘要": "section",
+        }
+        mode_label = st.radio(
+            "摘要模式",
+            list(mode_options),
+            label_visibility="collapsed",
+            key="summary_mode_label",
+        )
+        language_options = {
+            "跟随原文": "source",
+            "简体中文": "zh",
+            "English": "en",
+        }
+        language_label = st.selectbox(
+            "输出语言",
+            list(language_options),
+            key="summary_language_label",
+        )
+        output_name = st.text_input("下载文件名", key="summary_output_name")
+        st.caption("点击生成即表示允许把当前输入发送到 DeepSeek；无需重复确认。")
+
+        generate_clicked = st.button(
+            "生成摘要",
+            type="primary",
+            icon=":material/summarize:",
+            width="stretch",
+            disabled=not api_key,
+        )
+
+        if generate_clicked:
+            if not markdown_source.strip():
+                st.error("请先输入内容。")
+            elif len(markdown_source) > MAX_SOURCE_CHARACTERS:
+                st.error(f"文稿超过 {MAX_SOURCE_CHARACTERS // 10_000} 万字符，请拆分后再摘要。")
+            else:
+                try:
+                    with st.spinner("正在生成摘要…"):
+                        st.session_state.summary_result = summarize_markdown(
+                            markdown_source,
+                            mode=mode_options[mode_label],
+                            language=language_options[language_label],
+                            api_key=api_key,
+                            model=model,
+                            base_url=base_url,
+                        )
+                        st.session_state.summary_source_digest = hashlib.sha256(
+                            markdown_source.encode("utf-8")
+                        ).hexdigest()
+                        st.session_state.pop("summary_export", None)
+                    st.rerun()
+                except SummaryError as error:
+                    st.error(str(error))
+                except Exception:
+                    st.error("摘要生成失败，请查看 Streamlit Cloud 日志。")
+
+with st.expander("输入、API 与隐私"):
     st.markdown(
         f"""
+        - 支持 Markdown、UTF-8 TXT 和普通文本型 PDF；扫描件或图片型 PDF 需要先做 OCR。
         - 当前模型：`{model}`。
-        - 只有点击“生成摘要”后，正文才会发送到 DeepSeek。
+        - 只有点击“生成摘要”后，输入内容才会发送到 DeepSeek。
         - API Key 只从 Streamlit Secrets 读取，不会显示在页面、日志或下载文件中。
-        - 单篇文稿上限为 {MAX_SOURCE_CHARACTERS // 10_000} 万字符。
+        - 单篇文稿上限为 {MAX_SOURCE_CHARACTERS // 10_000} 万字符，PDF 上限为 500 页。
         """
     )

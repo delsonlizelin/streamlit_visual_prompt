@@ -5,6 +5,7 @@ PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_DIR))
 
 from longread_pdf import render_summary_long_image, render_summary_pdf
+from input_documents import extract_uploaded_document
 
 
 SOURCE = """# 一份中英文摘要
@@ -35,11 +36,17 @@ if __name__ == "__main__":
         )
         if result.overflows or result.blank_pages:
             raise SystemExit(f"summary PDF {mode} failed layout QA")
+        if mode == "desktop":
+            extracted = extract_uploaded_document("generated-summary.pdf", result.pdf)
+            print(f"pdf input: {extracted.pages} pages, {len(extracted.text)} extracted characters")
+            if extracted.pages != 1 or len(extracted.text) < 80:
+                raise SystemExit("generated summary PDF failed text extraction QA")
 
     for mode in ("tablet", "mobile"):
         result = render_summary_long_image(SOURCE, mode=mode)
         target = output_dir / f"summary.{mode}.png"
         target.write_bytes(result.png)
         print(f"image {mode}: {result.width}×{result.height}px -> {target}")
-        if result.width < 800 or result.height <= result.width:
+        expected_width = {"tablet": 1500, "mobile": 1227}[mode]
+        if result.width != expected_width or result.height <= result.width:
             raise SystemExit(f"summary image {mode} has unexpected dimensions")
