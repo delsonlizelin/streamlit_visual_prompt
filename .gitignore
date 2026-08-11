@@ -5,3 +5,5 @@ __pycache__/
 .venv/
 markdown_pdf/.smoke-output/
 markdown_pdf/*.pdf
+markdown_pdf/.streamlit/secrets.toml
+.streamlit/secrets.toml

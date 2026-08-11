@@ -1,6 +1,8 @@
 # Markdown PDF
 
-把中文、英文或双语 Markdown 转成适合长时间阅读的 PDF。应用提供三种确定性版式：
+一个轻量的双页面 Streamlit 应用：把中文、英文或双语 Markdown 转成适合长时间阅读的 PDF，或生成忠实、可下载的文章摘要。
+
+PDF 页面提供三种确定性版式：
 
 - **电脑端**：A4、11.2 pt 正文、静态宋体页眉、左下页码。
 - **平板端**：132 × 201 mm、12.1 pt 正文，匹配 iPad mini 竖屏比例、无页眉、居中页码。
@@ -24,9 +26,42 @@
 
 检查不调用模型，也不会修改原始 Markdown。未闭合代码围栏或不安全链接等红色错误会阻止导出，其余提醒允许继续生成。PDF 生成后还会检查空白页，以及正文中的链接、段落、列表、代码、表格、图片和引用是否越过页面内容边界。
 
-## 不需要模型 API
+## 文章摘要
 
-转换过程完全在 Streamlit 应用的运行环境中完成，不调用 DeepSeek、OpenAI 或其他模型服务。只有在未来增加“自动摘要、自动起标题、内容润色”等 AI 功能时，才需要可选的模型 API 密钥。
+独立的“文章摘要”页面支持上传或粘贴 Markdown，并提供：
+
+- 简短摘要、标准摘要、分章节摘要；
+- 跟随原文、简体中文、English 三种输出语言；
+- 一键复制、下载 Markdown，或把摘要直接发送到 Markdown PDF 页面；
+- 生成 Desktop、Tablet、Mobile 三种紧凑摘要 PDF；
+- 生成 Tablet 或 Mobile 连续 PNG 长图；
+- 保留重要数字、日期、名称、限制条件、因果关系和否定表达；
+- 把文档与系统指令分隔，降低文稿中提示词注入内容的影响。
+
+摘要页首版只使用 DeepSeek Chat Completions API。请求使用 JSON 输出，单篇上限为 30 万字符；未配置 Key 时页面仍能打开和编辑，但生成按钮会禁用。提示词要求中性、直接和高信息密度，并限制模型只输出当前 PDF 渲染器稳定支持的 Markdown。原文没有明确结论时，模型不得替作者补出结论。
+
+PDF 使用没有封面和目录的紧凑摘要模板。长图沿用 Tablet / Mobile 的字体、行宽与段落节奏，把分页改成一张连续图片；如果摘要长到超过 Chromium 的稳定单图高度，页面会提示改用 PDF 或 Markdown。
+
+## API 与隐私
+
+PDF 转换完全在 Streamlit 应用的运行环境中完成，不调用 DeepSeek、OpenAI 或其他模型服务。只有点击摘要页的“生成摘要”后，正文才会发送到 DeepSeek。
+
+本地开发时，复制示例文件并填写自己的 Key：
+
+```bash
+cd markdown_pdf
+cp .streamlit/secrets.toml.example .streamlit/secrets.toml
+```
+
+```toml
+DEEPSEEK_API_KEY = "your-key"
+DEEPSEEK_MODEL = "deepseek-v4-flash"
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+```
+
+`.streamlit/secrets.toml` 已被 Git 忽略。不要把真实 Key 写进代码、提交到仓库或粘贴到公开日志。
+
+应用启动时会自动读取 Key，但只有点击“生成摘要”才会调用 DeepSeek 和消耗额度。
 
 ## 依赖
 
@@ -36,6 +71,8 @@ Python 依赖写在 `requirements.txt`：
 - `Markdown`：Markdown 解析；
 - `bleach`：清理上传内容中的不安全 HTML；
 - `playwright`：控制 Chromium 生成带 CSS 分页的 PDF。
+
+摘要请求使用 Python 标准库发送，没有引入 DeepSeek SDK 或额外 AI 框架。
 
 仓库根目录的 `packages.txt` 会让 Streamlit Community Cloud 安装：
 
@@ -65,8 +102,9 @@ macOS 会自动寻找 `/Applications/Google Chrome.app`。Linux 默认寻找 `ch
 2. 在 Streamlit Community Cloud 中新建应用。
 3. 选择这个仓库与分支，入口文件填写 `markdown_pdf/streamlit_app.py`。
 4. Python 版本选择 3.12，然后部署。
+5. 如果需要摘要，在应用的 **Settings → Secrets** 中填写与上方相同的三项配置，然后重启应用。
 
-不需要在 Secrets 中配置任何 API key。
+只使用 PDF 功能时，不需要配置任何 API Key。
 
 ## 支持范围
 
@@ -77,10 +115,11 @@ macOS 会自动寻找 `/Applications/Google Chrome.app`。Linux 默认寻找 `ch
 ```bash
 python -m unittest discover -s tests -v
 python scripts/smoke_test.py
+python scripts/summary_export_smoke_test.py
 ```
 
-冒烟测试会用同一份中英文回归文稿生成 A4、Tablet 和 9:16 三份 PDF，并在检测到空白页或正文溢出时失败。
+第一组冒烟测试会用同一份中英文回归文稿生成 A4、Tablet 和 9:16 三份长文 PDF。第二组会生成三种紧凑摘要 PDF，以及 Tablet / Mobile 两张长图；检测到空白页、正文溢出或异常图片尺寸时会失败。
 
 ## 后续版本
 
-下一阶段会在现有转换器之外增加一个独立的“格式调整与摘要”工作区：先诊断 Markdown 与当前渲染器不兼容的写法，再以可审阅差异的方式修复；摘要功能则提供不同长度、要点和结构化输出。详细约束见 [`ROADMAP.md`](ROADMAP.md)。AI 功能需要可选的模型 API，但基础 PDF 转换始终保持无 API 可用。
+PDF 与摘要保持为两个独立页面，但摘要可以一键送入 PDF 编辑器。复杂的 AI 格式润色、多模型切换、账号和历史记录暂不加入；是否继续开发以真实使用反馈为准。详细边界见 [`ROADMAP.md`](ROADMAP.md)。

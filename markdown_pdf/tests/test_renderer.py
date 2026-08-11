@@ -2,7 +2,12 @@ import unittest
 
 from longread_pdf.preflight import preflight_markdown
 from longread_pdf.gpt_prompt import GPT_MARKDOWN_PROMPT
-from longread_pdf.renderer import build_document, normalize_markdown
+from longread_pdf.renderer import (
+    RenderError,
+    build_document,
+    build_summary_document,
+    normalize_markdown,
+)
 
 
 class RendererTests(unittest.TestCase):
@@ -37,6 +42,30 @@ class RendererTests(unittest.TestCase):
         self.assertIn("size: 132mm 201mm", document.html)
         self.assertIn("font-size: 12.1pt", document.html)
         self.assertIn("content: none", document.html)
+
+    def test_summary_pdf_uses_compact_template_without_cover_or_toc(self):
+        document = build_summary_document(
+            "# 摘要标题\n\n## 核心内容\n\n- 第一条。",
+            mode="tablet",
+        )
+        self.assertIn('class="summary-header"', document.html)
+        self.assertIn('class="longread"', document.html)
+        self.assertNotIn('class="cover"', document.html)
+        self.assertNotIn('class="toc-page"', document.html)
+
+    def test_long_image_uses_continuous_mobile_layout(self):
+        document = build_summary_document(
+            "# 摘要标题\n\n正文。",
+            mode="mobile",
+            continuous=True,
+        )
+        self.assertIn("continuous-output", document.html)
+        self.assertIn("阅读摘要", document.html)
+        self.assertIn("overflow: hidden", document.html)
+
+    def test_long_image_rejects_desktop_mode(self):
+        with self.assertRaisesRegex(RenderError, "只支持平板和手机"):
+            build_summary_document("# 摘要", mode="desktop", continuous=True)
 
     def test_bare_url_gets_safe_wrapping_class(self):
         target = "https://example.com/a/very-long-path-without-a-readable-label"

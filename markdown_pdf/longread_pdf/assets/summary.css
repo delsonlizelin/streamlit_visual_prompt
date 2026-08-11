@@ -1,0 +1,49 @@
+.summary-header {
+  margin: 0 0 8mm;
+  padding: 0 0 5mm;
+  border-bottom: .25mm solid var(--rule);
+}
+
+.summary-kicker {
+  margin: 0 0 2.5mm;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 8.8pt;
+  line-height: 1.4;
+  letter-spacing: .08em;
+}
+
+.summary-header h1 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 23pt;
+  font-weight: 600;
+  line-height: 1.38;
+  letter-spacing: 0;
+  text-align: left;
+  text-wrap: balance;
+}
+
+.summary-footer { display: none; }
+
+.mode-tablet .summary-header h1 { font-size: 22pt; }
+.mode-mobile .summary-header h1 { font-size: 21pt; }
+
+@media screen {
+  .summary-output .summary-header {
+    margin-bottom: 0;
+  }
+
+  .summary-output.mode-desktop .summary-header {
+    padding: 24mm 25mm 5mm;
+  }
+
+  .summary-output.mode-tablet .summary-header {
+    padding: 15mm 14mm 5mm;
+  }
+
+  .summary-output.mode-mobile .summary-header {
+    padding: 12mm 10mm 5mm;
+  }
+}

@@ -187,7 +187,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.longread { page: auto; }
+body:not(.summary-output) .longread { page: auto; }
 
 .longread > :first-child { margin-top: 0; }
 

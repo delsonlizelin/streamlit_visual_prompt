@@ -49,6 +49,11 @@ MODE_PROFILES = {
         "bottom_center": "counter(page)",
     },
 }
+LONG_IMAGE_PROFILES = {
+    "tablet": {"viewport_width": 500, "device_scale_factor": 2},
+    "mobile": {"viewport_width": 409, "device_scale_factor": 2},
+}
+MAX_LONG_IMAGE_CSS_HEIGHT = 16_000
 
 ALLOWED_TAGS = {
     "p", "h2", "h3", "h4", "h5", "h6", "blockquote", "strong", "em",
@@ -91,6 +96,16 @@ class RenderResult:
     normalized_emphasis_lines: int
     blank_pages: tuple[int, ...]
     overflows: tuple[dict[str, Any], ...]
+    milliseconds: int
+
+
+@dataclass(frozen=True)
+class LongImageResult:
+    png: bytes
+    title: str
+    mode: str
+    width: int
+    height: int
     milliseconds: int
 
 
@@ -282,6 +297,20 @@ def _fill(source: str, values: dict[str, str]) -> str:
     return source
 
 
+def _mode_css(mode: str, running_title: str) -> str:
+    profile = MODE_PROFILES[mode]
+    return _fill((ASSET_DIR / "longread.css").read_text(encoding="utf-8"), {
+        "PAGE_SIZE_CSS": profile["page_size"],
+        "PAGE_WIDTH_CSS": profile["page_width"],
+        "PAGE_HEIGHT_CSS": profile["page_height"],
+        "PAGE_MARGIN_CSS": profile["page_margin"],
+        "TOC_MARGIN_CSS": profile["toc_margin"],
+        "RUNNING_HEADER_CONTENT_CSS": f'"{_css_string(running_title)}"' if mode == "desktop" else "none",
+        "BOTTOM_LEFT_CONTENT_CSS": profile["bottom_left"],
+        "BOTTOM_CENTER_CONTENT_CSS": profile["bottom_center"],
+    })
+
+
 def build_document(markdown_source: str, mode: str = "desktop", short_title: str = "") -> DocumentBuild:
     if mode not in ALLOWED_MODES:
         raise RenderError(f"未知模式：{mode}")
@@ -292,18 +321,7 @@ def build_document(markdown_source: str, mode: str = "desktop", short_title: str
     title, deck, body = _extract_front(normalized)
     article_html, toc = _render_article(body)
     running_title = short_title.strip() or _short_running_title(title)
-    profile = MODE_PROFILES[mode]
-
-    css = _fill((ASSET_DIR / "longread.css").read_text(encoding="utf-8"), {
-        "PAGE_SIZE_CSS": profile["page_size"],
-        "PAGE_WIDTH_CSS": profile["page_width"],
-        "PAGE_HEIGHT_CSS": profile["page_height"],
-        "PAGE_MARGIN_CSS": profile["page_margin"],
-        "TOC_MARGIN_CSS": profile["toc_margin"],
-        "RUNNING_HEADER_CONTENT_CSS": f'"{_css_string(running_title)}"' if mode == "desktop" else "none",
-        "BOTTOM_LEFT_CONTENT_CSS": profile["bottom_left"],
-        "BOTTOM_CENTER_CONTENT_CSS": profile["bottom_center"],
-    })
+    css = _mode_css(mode, running_title)
     deck_html = "\n".join(f"<p>{_inline_markdown(line)}</p>" for line in deck) if deck else "<p>适合专注阅读的长文版本</p>"
     toc_html = "\n".join(
         f'<li><a href="#{identifier}">{html_lib.escape(label)}</a></li>' for identifier, label in toc
@@ -324,6 +342,45 @@ def build_document(markdown_source: str, mode: str = "desktop", short_title: str
     return DocumentBuild(document, title, running_title, len(toc), changed_lines)
 
 
+def build_summary_document(
+    markdown_source: str,
+    mode: str = "tablet",
+    *,
+    continuous: bool = False,
+) -> DocumentBuild:
+    if mode not in ALLOWED_MODES:
+        raise RenderError(f"未知模式：{mode}")
+    if continuous and mode not in LONG_IMAGE_PROFILES:
+        raise RenderError("长图只支持平板和手机模式。")
+    if not markdown_source.strip():
+        raise RenderError("Markdown 内容不能为空。")
+
+    normalized, changed_lines = normalize_markdown(markdown_source)
+    title, _deck, body = _extract_front(normalized, fallback_title="文章摘要")
+    article_html, toc = _render_article(body)
+    running_title = _short_running_title(title)
+    css_parts = [
+        _mode_css(mode, running_title),
+        (ASSET_DIR / "summary.css").read_text(encoding="utf-8"),
+    ]
+    if continuous:
+        css_parts.append((ASSET_DIR / "long_image.css").read_text(encoding="utf-8"))
+
+    template = (ASSET_DIR / "summary_template.html").read_text(encoding="utf-8")
+    document = _fill(template, {
+        "LANG": _detect_language(normalized),
+        "BASE_URL": "",
+        "MODE": mode,
+        "OUTPUT_CLASS": "continuous-output" if continuous else "paged-output",
+        "TITLE": html_lib.escape(title),
+        "SHORT_TITLE": html_lib.escape(running_title),
+        "DATE": datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y年%-m月%-d日"),
+        "CONTENT": article_html,
+        "CSS": "\n".join(css_parts),
+    })
+    return DocumentBuild(document, title, running_title, len(toc), changed_lines)
+
+
 def _chromium_path() -> str | None:
     configured = os.environ.get("CHROMIUM_PATH")
     if configured and Path(configured).is_file():
@@ -336,8 +393,18 @@ def _chromium_path() -> str | None:
     return str(mac_chrome) if mac_chrome.is_file() else None
 
 
-def render_markdown(markdown_source: str, mode: str = "desktop", short_title: str = "") -> RenderResult:
-    build = build_document(markdown_source, mode=mode, short_title=short_title)
+def _launch_options() -> dict[str, Any]:
+    options: dict[str, Any] = {
+        "headless": True,
+        "args": ["--no-sandbox", "--disable-dev-shm-usage"],
+    }
+    executable = _chromium_path()
+    if executable:
+        options["executable_path"] = executable
+    return options
+
+
+def _render_paged_document(build: DocumentBuild, *, mode: str) -> RenderResult:
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="markdown-pdf-") as temp_dir:
         html_path = Path(temp_dir) / "document.html"
@@ -345,14 +412,7 @@ def render_markdown(markdown_source: str, mode: str = "desktop", short_title: st
         html_uri = html_path.as_uri()
         try:
             with sync_playwright() as playwright:
-                launch_options: dict[str, Any] = {
-                    "headless": True,
-                    "args": ["--no-sandbox", "--disable-dev-shm-usage"],
-                }
-                executable = _chromium_path()
-                if executable:
-                    launch_options["executable_path"] = executable
-                browser = playwright.chromium.launch(**launch_options)
+                browser = playwright.chromium.launch(**_launch_options())
                 try:
                     page = browser.new_page()
 
@@ -448,5 +508,91 @@ def render_markdown(markdown_source: str, mode: str = "desktop", short_title: st
         normalized_emphasis_lines=build.normalized_emphasis_lines,
         blank_pages=tuple(qa["blankPages"]),
         overflows=tuple(qa["overflows"]),
+        milliseconds=round((time.monotonic() - started) * 1000),
+    )
+
+
+def render_markdown(markdown_source: str, mode: str = "desktop", short_title: str = "") -> RenderResult:
+    build = build_document(markdown_source, mode=mode, short_title=short_title)
+    return _render_paged_document(build, mode=mode)
+
+
+def render_summary_pdf(markdown_source: str, mode: str = "tablet") -> RenderResult:
+    build = build_summary_document(markdown_source, mode=mode)
+    return _render_paged_document(build, mode=mode)
+
+
+def render_summary_long_image(markdown_source: str, mode: str = "mobile") -> LongImageResult:
+    if mode not in LONG_IMAGE_PROFILES:
+        raise RenderError("长图只支持平板和手机模式。")
+
+    build = build_summary_document(markdown_source, mode=mode, continuous=True)
+    profile = LONG_IMAGE_PROFILES[mode]
+    started = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="markdown-image-") as temp_dir:
+        html_path = Path(temp_dir) / "summary.html"
+        html_path.write_text(build.html, encoding="utf-8")
+        html_uri = html_path.as_uri()
+        try:
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(**_launch_options())
+                try:
+                    page = browser.new_page(
+                        viewport={"width": profile["viewport_width"], "height": 900},
+                        device_scale_factor=profile["device_scale_factor"],
+                    )
+
+                    def route_request(route: Any) -> None:
+                        url = route.request.url
+                        if url == html_uri or url.startswith(("data:", "https://")):
+                            route.continue_()
+                        else:
+                            route.abort()
+
+                    page.route("**/*", route_request)
+                    page.goto(html_uri, wait_until="load")
+                    page.evaluate("() => document.fonts.ready")
+                    page.evaluate(r"""
+                        () => Promise.all([...document.images].map((image) => {
+                          if (image.complete) return Promise.resolve();
+                          return new Promise((resolve) => {
+                            image.addEventListener('load', resolve, { once: true });
+                            image.addEventListener('error', resolve, { once: true });
+                          });
+                        }))
+                    """)
+                    geometry = page.evaluate(r"""
+                        () => ({
+                          height: Math.ceil(document.documentElement.scrollHeight),
+                          horizontalOverflow: Math.max(
+                            0,
+                            document.documentElement.scrollWidth - window.innerWidth
+                          ),
+                        })
+                    """)
+                    if int(geometry["horizontalOverflow"]) > 2:
+                        raise RenderError("长图内容发生横向溢出，请检查摘要中的长链接或复杂内容。")
+                    if int(geometry["height"]) > MAX_LONG_IMAGE_CSS_HEIGHT:
+                        raise RenderError("摘要过长，无法稳定导出为单张长图；请改用 PDF 或 Markdown。")
+                    png = page.locator("body").screenshot(type="png", animations="disabled")
+                finally:
+                    browser.close()
+        except RenderError:
+            raise
+        except PlaywrightError as error:
+            raise RenderError(
+                "无法生成长图。请确认本机安装了 Chrome，或在 Streamlit Cloud 的 packages.txt 中安装 chromium。"
+            ) from error
+
+    if len(png) < 24 or png[:8] != b"\x89PNG\r\n\x1a\n":
+        raise RenderError("Chromium 没有返回有效的 PNG 长图。")
+    width = int.from_bytes(png[16:20], "big")
+    height = int.from_bytes(png[20:24], "big")
+    return LongImageResult(
+        png=png,
+        title=build.title,
+        mode=mode,
+        width=width,
+        height=height,
         milliseconds=round((time.monotonic() - started) * 1000),
     )
