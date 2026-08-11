@@ -19,7 +19,7 @@ from playwright.sync_api import sync_playwright
 
 
 ASSET_DIR = Path(__file__).resolve().parent / "assets"
-ALLOWED_MODES = {"desktop", "mobile"}
+ALLOWED_MODES = {"desktop", "tablet", "mobile"}
 MODE_PROFILES = {
     "desktop": {
         "page_size": "A4",
@@ -39,6 +39,15 @@ MODE_PROFILES = {
         "bottom_left": "none",
         "bottom_center": "counter(page)",
     },
+    "tablet": {
+        "page_size": "132mm 201mm",
+        "page_width": "132mm",
+        "page_height": "201mm",
+        "page_margin": "15mm 14mm 13mm",
+        "toc_margin": "15mm 14mm 13mm",
+        "bottom_left": "none",
+        "bottom_center": "counter(page)",
+    },
 }
 
 ALLOWED_TAGS = {
@@ -47,7 +56,7 @@ ALLOWED_TAGS = {
     "thead", "tbody", "tr", "th", "td", "figure", "figcaption",
 }
 ALLOWED_ATTRIBUTES = {
-    "a": ["href", "title"],
+    "a": ["href", "title", "class"],
     "img": ["src", "alt", "title", "width", "height"],
     "th": ["colspan", "rowspan"],
     "td": ["colspan", "rowspan"],
@@ -223,6 +232,21 @@ def _render_article(source: str) -> tuple[str, list[tuple[str, str]]]:
 
     rendered = re.sub(r"<h([23])>([\s\S]*?)</h\1>", heading, rendered)
 
+    def link_class(match: re.Match[str]) -> str:
+        attributes, inner = match.group(1), match.group(2)
+        href_match = re.search(r'\bhref="([^"]*)"', attributes)
+        if not href_match:
+            return match.group(0)
+        href = html_lib.unescape(href_match.group(1)).strip()
+        visible = _plain_text(inner)
+        is_url = bool(re.match(r"^(?:https?://|www\.)", visible, flags=re.I))
+        is_bare = is_url or visible.rstrip("/") == href.rstrip("/")
+        if not is_bare or re.search(r'\bclass="', attributes):
+            return match.group(0)
+        return f'<a{attributes} class="bare-url">{inner}</a>'
+
+    rendered = re.sub(r"<a([^>]*)>([\s\S]*?)</a>", link_class, rendered)
+
     def quote_class(match: re.Match[str]) -> str:
         inner = match.group(1)
         class_name = ' class="long-quote"' if len(_plain_text(inner)) > 650 else ""
@@ -360,12 +384,39 @@ def render_markdown(markdown_source: str, mode: str = "desktop", short_title: st
                         () => {
                           const pages = [...document.querySelectorAll('.pagedjs_page')];
                           const overflows = [];
-                          document.querySelectorAll('pre, table, figure, img, svg, blockquote').forEach((element) => {
-                            if (element.scrollWidth > element.clientWidth + 2) {
+                          const selector = [
+                            'a', 'p', 'li', 'code', 'pre', 'table', 'th', 'td',
+                            'figure', 'img', 'svg', 'blockquote'
+                          ].join(', ');
+                          document.querySelectorAll(`.pagedjs_page_content ${selector}`).forEach((element) => {
+                            // Paged.js keeps a fragmented grid box for multi-page TOCs;
+                            // its geometry spans fragments even though the visible rows fit.
+                            // TOCs are covered by visual regression instead of this article check.
+                            if (element.closest('.toc')) return;
+                            const content = element.closest('.pagedjs_page_content');
+                            const pageElement = element.closest('.pagedjs_page');
+                            if (!content || !pageElement) return;
+                            const contentRect = content.getBoundingClientRect();
+                            const rects = [...element.getClientRects()];
+                            let amount = 0;
+                            rects.forEach((rect) => {
+                              amount = Math.max(
+                                amount,
+                                rect.right - contentRect.right,
+                                contentRect.left - rect.left
+                              );
+                            });
+                            const scrollContainers = 'pre, table, figure, img, svg, blockquote';
+                            if (element.matches(scrollContainers) && element.clientWidth > 0) {
+                              amount = Math.max(amount, element.scrollWidth - element.clientWidth);
+                            }
+                            if (amount > 2) {
                               overflows.push({
+                                page: pages.indexOf(pageElement) + 1,
                                 tag: element.tagName.toLowerCase(),
-                                overflow: Math.round(element.scrollWidth - element.clientWidth),
-                                text: (element.textContent || '').replace(/\s+/g, ' ').slice(0, 80),
+                                overflow: Math.round(amount),
+                                text: (element.textContent || element.getAttribute('alt') || '')
+                                  .replace(/\s+/g, ' ').slice(0, 80),
                               });
                             }
                           });

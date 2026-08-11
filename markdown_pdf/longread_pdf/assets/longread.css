@@ -241,7 +241,24 @@ em { font-style: italic; }
 a {
   color: var(--link);
   text-decoration-color: #9aafb8;
+  text-decoration-thickness: .055em;
   text-underline-offset: .12em;
+}
+
+a.bare-url {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: none;
+  color: #4f6871;
+  font-family: var(--sans);
+  font-size: .9em;
+  line-height: 1.55;
+  text-decoration-color: #b4c0c4;
+}
+
+.longread li:has(a.bare-url) {
+  padding-left: .08em;
+  overflow-wrap: anywhere;
 }
 
 ul, ol {
@@ -360,6 +377,74 @@ pre {
 
 pre code { padding: 0; background: transparent; }
 
+body.mode-tablet {
+  font-size: 12.1pt;
+  line-height: 1.68;
+}
+
+.mode-tablet .cover-content {
+  left: 16mm;
+  right: 16mm;
+  top: 52mm;
+}
+
+.mode-tablet .cover-content h1 {
+  max-width: none;
+  font-size: 23.5pt;
+  line-height: 1.4;
+}
+
+.mode-tablet .cover-deck {
+  max-width: none;
+  margin-top: 9.5mm;
+  padding-top: 5.5mm;
+  font-size: 11.2pt;
+  line-height: 1.68;
+}
+
+.mode-tablet .cover-meta {
+  left: 16mm;
+  bottom: 14mm;
+  font-family: var(--serif);
+  font-size: 8.8pt;
+}
+
+.mode-tablet .toc-page h1 {
+  margin-bottom: 8mm;
+  font-size: 18.5pt;
+}
+
+.mode-tablet .toc {
+  font-size: 10.7pt;
+  line-height: 1.55;
+}
+
+.mode-tablet h2 {
+  margin: 8.5mm 0 3.2mm;
+  font-size: 15.5pt;
+  line-height: 1.4;
+}
+
+.mode-tablet h3 {
+  margin: 5.8mm 0 2.4mm;
+  font-size: 12.7pt;
+}
+
+.mode-tablet h4 { font-size: 11.5pt; }
+
+.mode-tablet blockquote {
+  margin: 4.8mm 0 5.2mm;
+  padding-left: 4.5mm;
+  font-size: 11.5pt;
+  line-height: 1.67;
+}
+
+.mode-tablet ul,
+.mode-tablet ol { padding-left: 1.5em; }
+
+.mode-tablet table { font-size: 9.2pt; }
+.mode-tablet img { max-height: 158mm; }
+
 body.mode-mobile {
   font-size: 12.8pt;
   line-height: 1.7;
@@ -433,9 +518,12 @@ body.mode-mobile {
 @media screen {
   body { margin: 0 auto; }
   body.mode-desktop { max-width: 210mm; }
+  body.mode-tablet { max-width: 132mm; }
   body.mode-mobile { max-width: 108mm; }
   .mode-desktop .longread { padding: 24mm 25mm 23mm; }
   .mode-desktop .toc-page { padding: 25mm 28mm 23mm; }
+  .mode-tablet .longread { padding: 15mm 14mm 13mm; }
+  .mode-tablet .toc-page { padding: 15mm 14mm 13mm; }
   .mode-mobile .longread { padding: 12mm 10mm 11mm; }
   .mode-mobile .toc-page { padding: 12mm 10mm 11mm; }
 }
