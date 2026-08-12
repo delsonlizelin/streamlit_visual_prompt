@@ -13,6 +13,28 @@ from typing import Any
 Preset = dict[str, Any]
 
 
+MAIN_TASK_NAMES = [
+    "自由创作",
+    "自然人物肖像",
+    "社交媒体海报",
+    "知识信息图",
+    "产品电商主图",
+    "故事绘本场景",
+    "贴纸 / 表情包",
+]
+
+MAIN_VISUAL_NAMES = [
+    "沿用用途模板",
+    "自然纪实摄影",
+    "电影剧照",
+    "极简编辑插画",
+    "现代主义海报",
+    "水彩绘本",
+    "清线动漫",
+    "黏土 3D",
+]
+
+
 TASK_TEMPLATES: dict[str, Preset] = {
     "自由创作": {
         "description": "不预设用途，让模型根据主体自行组织画面。",

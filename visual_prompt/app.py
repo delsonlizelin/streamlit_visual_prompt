@@ -10,7 +10,13 @@ from typing import Any
 
 import streamlit as st
 
-from presets import TASK_TEMPLATES, VISUAL_MODES, merged_values
+from presets import (
+    MAIN_TASK_NAMES,
+    MAIN_VISUAL_NAMES,
+    TASK_TEMPLATES,
+    VISUAL_MODES,
+    merged_values,
+)
 from question_bank import QUESTION_BANK
 
 
@@ -19,15 +25,16 @@ APP_SUBTITLE = "先套用成熟视觉模板，再按需要微调；最终得到�
 AUTO_CODE = "AUTO"
 
 QUESTION_BY_ID = {question["id"]: question for question in QUESTION_BANK}
-CORE_QUESTION_IDS = [
-    "input_mode", "purpose", "subject_type", "priority", "aspect_ratio",
-    "medium", "realism_level", "composition", "subject_scale", "color_scheme",
-    "lighting", "mood", "background_complexity", "additional_elements",
-]
-ADVANCED_QUESTION_IDS = [
-    "camera_angle", "linework", "shape_language", "detail_level", "texture",
-    "tuning_strength", "preserve_items", "avoid_items",
-]
+WORKFLOWS = {
+    "从零生成": {"code": "A", "description": "描述想要的画面，从空白开始生成。"},
+    "修改一张图": {"code": "B", "description": "上传原图后，明确要改什么，以及哪些内容不能变。"},
+    "融合多张参考图": {"code": "C", "description": "分别说明每张参考图提供主体、风格、构图或产品素材。"},
+}
+
+CONTENT_QUESTION_IDS = ["purpose", "subject_type", "priority"]
+VISUAL_QUESTION_IDS = ["medium", "realism_level", "color_scheme", "lighting", "mood"]
+COMPOSITION_QUESTION_IDS = ["aspect_ratio", "composition", "subject_scale", "background_complexity", "additional_elements"]
+ADVANCED_STYLE_IDS = ["camera_angle", "linework", "shape_language", "detail_level", "texture", "tuning_strength"]
 
 MODEL_TARGETS = {
     "ChatGPT Images（推荐）": "Write as a direct conversational image request for ChatGPT Images.",
@@ -80,6 +87,9 @@ def ensure_state() -> None:
     st.session_state.setdefault("visual_mode", "沿用用途模板")
     st.session_state.setdefault("generated_outputs", None)
     st.session_state.setdefault("output_size", "自动")
+    st.session_state.setdefault("workflow", "从零生成")
+    st.session_state.setdefault("show_more_templates", False)
+    st.session_state.setdefault("show_more_visuals", False)
 
 
 def apply_presets() -> None:
@@ -91,6 +101,7 @@ def apply_presets() -> None:
     )
     for question_id, value in values.items():
         st.session_state[f"q_{question_id}"] = value
+    st.session_state.q_input_mode = WORKFLOWS[st.session_state.workflow]["code"]
     st.session_state.output_size = ASPECT_RATIO_SIZES.get(str(values.get("aspect_ratio", "F")), "自动")
     st.session_state.generated_outputs = None
 
@@ -101,6 +112,7 @@ def reset_builder() -> None:
     st.session_state.task_template = "自由创作"
     st.session_state.visual_mode = "沿用用途模板"
     st.session_state.output_size = "自动"
+    st.session_state.workflow = "从零生成"
     st.session_state.generated_outputs = None
 
 
@@ -159,6 +171,23 @@ def render_question(question_id: str) -> str | list[str]:
     return value
 
 
+def render_question_grid(question_ids: list[str]) -> None:
+    for index in range(0, len(question_ids), 2):
+        columns = st.columns(2, gap="large")
+        for column, question_id in zip(columns, question_ids[index:index + 2]):
+            with column:
+                render_question(question_id)
+
+
+def visible_preset_names(main_names: list[str], presets: dict[str, Any], show_more: bool) -> list[str]:
+    return list(presets) if show_more else main_names
+
+
+def keep_preset_visible(key: str, names: list[str]) -> None:
+    if st.session_state[key] not in names:
+        st.session_state[key] = names[0]
+
+
 def answer_label(answers: dict[str, str | list[str]], question_id: str) -> str:
     selected = selected_options(question_id, answers[question_id])
     return "；".join(item["label"] for item in selected) if selected else "由模型根据整体画面判断"
@@ -174,18 +203,37 @@ def build_ready_prompt(
     custom: dict[str, str],
     output: dict[str, str],
 ) -> str:
+    custom = {
+        "subject_details": "",
+        "usage_notes": "",
+        "exact_text": "",
+        "edit_request": "",
+        "edit_area": "",
+        "source_description": "",
+        "reference_roles": "",
+        "custom_preserve": "",
+        "custom_avoid": "",
+        "custom_notes": "",
+        **custom,
+    }
     text_request = custom["exact_text"].strip()
+    workflow_code = str(answers["input_mode"])
     fragments = {
         qid: answer_fragments(answers, qid)
         for qid in QUESTION_BY_ID
     }
+    opening = {
+        "A": "Create one polished, production-ready image from the description below.",
+        "B": "Edit the supplied image according to the instructions below.",
+        "C": "Create one coherent image by combining the supplied reference images according to the role of each reference.",
+    }.get(workflow_code, "Create one polished, production-ready image.")
     lines = [
-        "Create one polished, production-ready image.",
+        opening,
         "",
         "GOAL AND USE",
         f"- Intended use: {fragments['purpose'] or 'infer the most suitable presentation from the subject'}.",
         f"- Primary priority: {fragments['priority'] or 'balance clarity, visual coherence, and appeal'}.",
-        f"- Subject: {custom['subject_details'].strip() or 'Use the subject description supplied with this prompt.'}",
+        f"- Subject / scene: {custom['subject_details'].strip() or 'Infer the visible subject from the supplied image references.'}",
     ]
     if custom["usage_notes"].strip():
         lines.append(f"- Audience / context: {custom['usage_notes'].strip()}")
@@ -216,6 +264,18 @@ def build_ready_prompt(
     else:
         lines.extend(["", "TEXT IN IMAGE", "- Do not add words, captions, logos, signatures, or watermarks."])
 
+    if workflow_code in {"B", "C"}:
+        lines.extend([
+            "",
+            "EDIT PLAN",
+            f"- Requested change: {custom['edit_request'].strip() or 'Apply only the explicitly requested visual transformation.'}",
+            f"- Target area: {custom['edit_area'].strip() or 'the relevant area described in the requested change'}.",
+        ])
+        if custom["reference_roles"].strip():
+            lines.append(f"- Reference roles: {custom['reference_roles'].strip()}")
+        if custom["source_description"].strip():
+            lines.append(f"- Optional source description: {custom['source_description'].strip()}")
+
     preserve = ", ".join(filter(None, [fragments["preserve_items"], custom["custom_preserve"].strip()]))
     avoid = ", ".join(filter(None, [fragments["avoid_items"], custom["custom_avoid"].strip()]))
     lines.extend([
@@ -228,9 +288,9 @@ def build_ready_prompt(
     if custom["custom_notes"].strip():
         lines.append(f"- Additional direction: {custom['custom_notes'].strip()}")
 
-    if answers["input_mode"] in {"B", "C"}:
+    if workflow_code in {"B", "C"}:
         lines.extend([
-            "- Treat each uploaded image as a reference, not as permission to redesign everything.",
+            "- Treat each uploaded image as a reference with a specific role, not as permission to redesign everything.",
             "- Change only what this prompt asks to change; keep all unrelated details stable.",
         ])
 
@@ -246,7 +306,7 @@ def build_ready_prompt(
 
 def build_summary(answers: dict[str, str | list[str]], custom: dict[str, str]) -> str:
     return (
-        f"{st.session_state.task_template} × {st.session_state.visual_mode}\n"
+        f"{st.session_state.workflow} · {st.session_state.task_template} × {st.session_state.visual_mode}\n"
         f"主体：{custom['subject_details'].strip() or '待补充'}\n"
         f"媒介：{answer_label(answers, 'medium')}\n"
         f"构图：{answer_label(answers, 'composition')} · {answer_label(answers, 'aspect_ratio')}\n"
@@ -263,7 +323,6 @@ def page_styles() -> None:
           .block-container { max-width: 1120px; padding-top: 2.4rem; padding-bottom: 5rem; }
           h1 { letter-spacing: -0.035em; margin-bottom: .25rem; }
           h2, h3 { letter-spacing: -0.018em; }
-          .eyebrow { color: var(--accent); font-weight: 700; font-size:.82rem; letter-spacing:.08em; text-transform:uppercase; }
           .intro { color:var(--muted); font-size:1.08rem; max-width:760px; line-height:1.75; margin-bottom:1.4rem; }
           [data-testid="stVerticalBlockBorderWrapper"] { background:#fff; }
           [data-testid="stSelectbox"] label p, [data-testid="stTextInput"] label p,
@@ -287,42 +346,82 @@ def main() -> None:
     page_styles()
     ensure_state()
 
-    st.markdown('<div class="eyebrow">Template-first image prompting</div>', unsafe_allow_html=True)
     st.title(APP_TITLE)
     st.markdown(f'<p class="intro">{APP_SUBTITLE}</p>', unsafe_allow_html=True)
 
-    with st.container(border=True):
-        st.subheader("1. 选择起点")
-        left, right = st.columns(2, gap="large")
-        with left:
-            st.selectbox(
-                "用途模板",
-                options=list(TASK_TEMPLATES),
-                key="task_template",
-                help="决定信息层级、构图和常见约束。",
-            )
-            st.caption(TASK_TEMPLATES[st.session_state.task_template]["description"])
-        with right:
-            st.selectbox(
-                "经典视觉模式",
-                options=list(VISUAL_MODES),
-                key="visual_mode",
-                help="叠加媒介、色彩、光影和材质；不会锁死后续选项。",
-            )
-            st.caption(VISUAL_MODES[st.session_state.visual_mode]["description"])
-        apply_col, reset_col = st.columns([3, 1])
-        with apply_col:
-            st.button("套用并预填全部选项", type="primary", width="stretch", on_click=apply_presets)
-        with reset_col:
-            st.button("清空", width="stretch", on_click=reset_builder)
+    st.subheader("你想怎样开始？")
+    workflow = st.segmented_control(
+        "工作方式",
+        options=list(WORKFLOWS),
+        key="workflow",
+        label_visibility="collapsed",
+        width="stretch",
+    ) or "从零生成"
+    st.caption(WORKFLOWS[workflow]["description"])
 
-    st.subheader("2. 描述你要的画面")
-    subject_details = st.text_area(
-        "主体与场景",
-        key="subject_details",
-        placeholder="例如：一位产品设计师在清晨的工作室整理纸质原型，桌面克制整洁……",
-        height=110,
-    )
+    st.subheader("选择一个起点")
+    task_names = visible_preset_names(MAIN_TASK_NAMES, TASK_TEMPLATES, st.session_state.show_more_templates)
+    visual_names = visible_preset_names(MAIN_VISUAL_NAMES, VISUAL_MODES, st.session_state.show_more_visuals)
+    keep_preset_visible("task_template", task_names)
+    keep_preset_visible("visual_mode", visual_names)
+    left, right = st.columns(2, gap="large")
+    with left:
+        st.selectbox("用途模板", task_names, key="task_template", help="预填常见的信息层级、构图和约束。")
+        st.caption(TASK_TEMPLATES[st.session_state.task_template]["description"])
+        st.toggle("更多专业用途", key="show_more_templates")
+    with right:
+        st.selectbox("视觉风格", visual_names, key="visual_mode", help="预填媒介、色彩、光影和材质。")
+        st.caption(VISUAL_MODES[st.session_state.visual_mode]["description"])
+        st.toggle("更多视觉风格", key="show_more_visuals")
+    apply_col, reset_col = st.columns([3, 1])
+    with apply_col:
+        st.button("套用模板", type="primary", width="stretch", on_click=apply_presets)
+    with reset_col:
+        st.button("清空", width="stretch", on_click=reset_builder)
+
+    st.subheader("核心需求")
+    if workflow == "从零生成":
+        subject_details = st.text_area(
+            "主体与场景",
+            key="subject_details",
+            placeholder="例如：一位产品设计师在清晨的工作室整理纸质原型，桌面克制整洁……",
+            height=110,
+        )
+        edit_request = ""
+        edit_area = ""
+        reference_roles = ""
+        source_description = ""
+    else:
+        edit_request = st.text_area(
+            "你希望修改什么？",
+            key="edit_request",
+            placeholder="例如：只把白天改成下雪的冬日晚景；人物、机位和建筑结构都不要改变。",
+            height=110,
+        )
+        edit_left, edit_right = st.columns(2, gap="large")
+        with edit_left:
+            edit_area = st.text_input("修改区域（可选）", key="edit_area", placeholder="例如：人物外套、右上角背景、整张图的光线")
+        with edit_right:
+            source_description = st.text_input("原图简述（可选）", key="source_description", placeholder="模型能直接看图；只有歧义时才填写")
+        if workflow == "融合多张参考图":
+            reference_roles = st.text_area(
+                "分别说明参考图的作用",
+                key="reference_roles",
+                placeholder="例如：图 1 提供人物身份；图 2 提供服装；图 3 提供场景和构图。",
+                height=90,
+            )
+        else:
+            reference_roles = ""
+        subject_details = st.text_input(
+            "成图主体或新场景（可选）",
+            key="subject_details",
+            placeholder="与原图一致可留空；只有替换场景或新增主体时填写。",
+        )
+        custom_preserve = st.text_input(
+            "哪些内容绝对不能改变？",
+            key="custom_preserve",
+            placeholder="例如：人物身份、姿势、包装文字、机位和背景结构",
+        )
     usage_notes = st.text_input("受众或使用场景（可选）", key="usage_notes", placeholder="例如：小红书知识卡片，手机端优先")
     exact_text = st.text_area(
         "必须出现在图片里的原文（可选）",
@@ -331,26 +430,29 @@ def main() -> None:
         height=80,
     )
 
-    with st.expander("调整核心选项", expanded=True):
-        for index in range(0, len(CORE_QUESTION_IDS), 2):
-            columns = st.columns(2, gap="large")
-            for column, question_id in zip(columns, CORE_QUESTION_IDS[index:index + 2]):
-                with column:
-                    render_question(question_id)
-
-    with st.expander("高级微调", expanded=False):
-        st.caption("模板已经预填了这些项目。只有确实需要时再改，避免提示词互相冲突。")
-        for index in range(0, len(ADVANCED_QUESTION_IDS), 2):
-            columns = st.columns(2, gap="large")
-            for column, question_id in zip(columns, ADVANCED_QUESTION_IDS[index:index + 2]):
-                with column:
-                    render_question(question_id)
-        custom_preserve = st.text_input("额外必须保留", key="custom_preserve", placeholder="例如：人物脸型、包装标签、原图机位")
+    st.subheader("按需要微调")
+    st.caption("模板已经给出可用配置。多数情况下，只改一两个确实重要的项目即可。")
+    with st.expander("内容与用途"):
+        render_question_grid(CONTENT_QUESTION_IDS)
+    with st.expander("视觉风格"):
+        render_question_grid(VISUAL_QUESTION_IDS)
+    with st.expander("构图与版式"):
+        render_question_grid(COMPOSITION_QUESTION_IDS)
+    with st.expander("高级控制"):
+        render_question_grid(ADVANCED_STYLE_IDS)
+        if workflow != "从零生成":
+            render_question("preserve_items")
+        render_question("avoid_items")
+        if workflow == "从零生成":
+            custom_preserve = st.text_input(
+                "必须保持的特征（可选）",
+                key="custom_preserve",
+                placeholder="例如：人物脸型、品牌主色、产品轮廓",
+            )
         custom_avoid = st.text_input("额外不要出现", key="custom_avoid", placeholder="例如：不要渐变、不要装饰边框")
         custom_notes = st.text_area("其他美术指导", key="custom_notes", placeholder="例如：更成熟、更克制，留白多一些")
 
-    with st.container(border=True):
-        st.subheader("3. 输出设置")
+    with st.expander("输出设置"):
         target_col, size_col, quality_col = st.columns(3, gap="large")
         with target_col:
             target = st.selectbox("使用位置", list(MODEL_TARGETS), key="model_target")
@@ -361,11 +463,16 @@ def main() -> None:
         st.caption("GPT Image 2 支持灵活尺寸；2K 以上更适合作为最终输出，草稿阶段优先使用低质量设置。")
 
     if st.button("生成可复制提示词", type="primary", width="stretch", icon=":material/auto_awesome:"):
+        st.session_state.q_input_mode = WORKFLOWS[workflow]["code"]
         answers = {question["id"]: st.session_state[f"q_{question['id']}"] for question in QUESTION_BANK}
         custom = {
             "subject_details": subject_details,
             "usage_notes": usage_notes,
             "exact_text": exact_text,
+            "edit_request": edit_request,
+            "edit_area": edit_area,
+            "source_description": source_description,
+            "reference_roles": reference_roles,
             "custom_preserve": st.session_state.get("custom_preserve", ""),
             "custom_avoid": st.session_state.get("custom_avoid", ""),
             "custom_notes": st.session_state.get("custom_notes", ""),
@@ -378,6 +485,7 @@ def main() -> None:
                 "generated_at": datetime.now().isoformat(timespec="seconds"),
                 "task_template": st.session_state.task_template,
                 "visual_mode": st.session_state.visual_mode,
+                "workflow": workflow,
             },
             "output": output,
             "answers": answers,

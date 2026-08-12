@@ -9,7 +9,13 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP_ROOT))
 
 from app import build_ready_prompt, default_answers  # noqa: E402
-from presets import TASK_TEMPLATES, VISUAL_MODES, merged_values  # noqa: E402
+from presets import (  # noqa: E402
+    MAIN_TASK_NAMES,
+    MAIN_VISUAL_NAMES,
+    TASK_TEMPLATES,
+    VISUAL_MODES,
+    merged_values,
+)
 from question_bank import QUESTION_BANK  # noqa: E402
 
 
@@ -36,6 +42,8 @@ class PresetTests(unittest.TestCase):
     def test_library_has_multiple_task_and_visual_choices(self) -> None:
         self.assertGreaterEqual(len(TASK_TEMPLATES), 10)
         self.assertGreaterEqual(len(VISUAL_MODES), 15)
+        self.assertLess(len(MAIN_TASK_NAMES), len(TASK_TEMPLATES))
+        self.assertLess(len(MAIN_VISUAL_NAMES), len(VISUAL_MODES))
 
 
 class PromptTests(unittest.TestCase):
@@ -74,6 +82,37 @@ class PromptTests(unittest.TestCase):
             {"target": "通用生图工具", "size": "auto", "quality": "low"},
         )
         self.assertIn("Do not add words, captions, logos, signatures, or watermarks", prompt)
+
+    def test_edit_prompt_prioritizes_change_area_and_preservation(self) -> None:
+        answers = default_answers()
+        answers["input_mode"] = "B"
+        answers["preserve_items"] = ["B", "C"]
+        prompt = build_ready_prompt(
+            answers,
+            {
+                "edit_request": "把白天改成下雪的冬日晚景",
+                "edit_area": "整张图的天气和光线",
+                "source_description": "街道中站着一个人",
+                "custom_preserve": "建筑结构",
+            },
+            {"target": "ChatGPT Images（推荐）", "size": "auto", "quality": "medium"},
+        )
+        self.assertTrue(prompt.startswith("Edit the supplied image"))
+        self.assertIn("EDIT PLAN", prompt)
+        self.assertIn("整张图的天气和光线", prompt)
+        self.assertIn("建筑结构", prompt)
+        self.assertIn("keep all unrelated details stable", prompt)
+
+    def test_multi_reference_prompt_records_reference_roles(self) -> None:
+        answers = default_answers()
+        answers["input_mode"] = "C"
+        prompt = build_ready_prompt(
+            answers,
+            {"edit_request": "合成产品场景", "reference_roles": "图1提供产品，图2提供场景"},
+            {"target": "通用生图工具", "size": "auto", "quality": "low"},
+        )
+        self.assertIn("combining the supplied reference images", prompt)
+        self.assertIn("图1提供产品，图2提供场景", prompt)
 
 
 if __name__ == "__main__":
