@@ -13,6 +13,7 @@ from summarizer import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
     MAX_SOURCE_CHARACTERS,
+    SYSTEM_PROMPT,
     SummaryError,
     summarize_markdown,
 )
@@ -34,6 +35,34 @@ SAMPLE = """# 一份等待摘要的长文
 def safe_filename(value: str) -> str:
     cleaned = re.sub(r'[\\/:*?"<>|]+', "_", value).strip(" ._")
     return (cleaned or "summary")[:100]
+
+
+def export_download_button(export: dict, *, key: str) -> None:
+    """Render a download button for the current PDF or long-image export."""
+    artifact = export["artifact"]
+    output_name = safe_filename(st.session_state.summary_output_name)
+    if export["kind"] == "pdf":
+        st.download_button(
+            f"下载 {export['mode']} PDF",
+            data=artifact.pdf,
+            file_name=f"{output_name}.summary.{export['mode']}.pdf",
+            mime="application/pdf",
+            icon=":material/download:",
+            width="stretch",
+            on_click="ignore",
+            key=key,
+        )
+    else:
+        st.download_button(
+            f"下载 {export['mode']} PNG 长图",
+            data=artifact.png,
+            file_name=f"{output_name}.summary.{export['mode']}.png",
+            mime="image/png",
+            icon=":material/download:",
+            width="stretch",
+            on_click="ignore",
+            key=key,
+        )
 
 
 def secret_value(name: str, default: str = "") -> str:
@@ -79,6 +108,11 @@ st.markdown(
     '<p class="intro">上传 Markdown、TXT 或普通文本型 PDF，生成结构清楚、可以直接下载和分享的摘要。</p>',
     unsafe_allow_html=True,
 )
+clipboard_button(
+    SYSTEM_PROMPT,
+    "复制摘要系统提示词",
+    key="summary-system-prompt",
+)
 
 if not api_key:
     st.info("尚未配置 DeepSeek API Key。页面可以编辑，但生成按钮暂不可用。")
@@ -104,33 +138,7 @@ if result:
     )
 
     if valid_export:
-        artifact = export["artifact"]
-        if export["kind"] == "pdf":
-            st.download_button(
-                f"下载 {export['mode']} PDF",
-                data=artifact.pdf,
-                file_name=(
-                    f"{safe_filename(st.session_state.summary_output_name)}."
-                    f"summary.{export['mode']}.pdf"
-                ),
-                mime="application/pdf",
-                icon=":material/download:",
-                width="stretch",
-                on_click="ignore",
-            )
-        else:
-            st.download_button(
-                f"下载 {export['mode']} PNG 长图",
-                data=artifact.png,
-                file_name=(
-                    f"{safe_filename(st.session_state.summary_output_name)}."
-                    f"summary.{export['mode']}.png"
-                ),
-                mime="image/png",
-                icon=":material/download:",
-                width="stretch",
-                on_click="ignore",
-            )
+        export_download_button(export, key="summary-export-download-top")
 
     copy_col, pdf_page_col = st.columns(2, gap="medium")
     with copy_col:
@@ -210,6 +218,11 @@ if result:
 
     if valid_export:
         artifact = export["artifact"]
+        st.success(
+            "导出文件已生成，可直接下载；下方预览只用于检查效果。",
+            icon=":material/check_circle:",
+        )
+        export_download_button(export, key="summary-export-download-inline")
         with st.expander("预览最近生成的导出文件", icon=":material/preview:"):
             if export["kind"] == "pdf":
                 st.caption(f"{artifact.pages} 页 · {artifact.milliseconds / 1000:.1f} 秒")
@@ -225,7 +238,10 @@ current_source_digest = hashlib.sha256(
     st.session_state.summary_markdown_source.encode("utf-8")
 ).hexdigest()
 if result and st.session_state.get("summary_source_digest") != current_source_digest:
-    st.info("输入内容已经修改；上方摘要仍是上一次生成的版本。请重新生成以更新结果。")
+    st.info(
+        "当前正文与生成摘要时的原文不同。上方摘要和导出文件不会自动更新；"
+        "如果你改了正文，请重新生成摘要。仅修改下载文件名不需要重新生成。"
+    )
 
 input_panel = (
     st.expander("编辑输入或重新生成", icon=":material/edit:")

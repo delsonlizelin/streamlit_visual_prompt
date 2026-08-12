@@ -32,6 +32,11 @@ class StreamlitEntrypointTests(unittest.TestCase):
                     self.assertEqual(list(app.exception), [])
                     self.assertTrue(hasattr(stale_components, "page_shell_styles"))
 
+    def test_summary_page_exposes_system_prompt_copy_button(self) -> None:
+        source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
+        self.assertIn('"复制摘要系统提示词"', source)
+        self.assertIn("SYSTEM_PROMPT", source)
+
 
 if __name__ == "__main__":
     unittest.main()

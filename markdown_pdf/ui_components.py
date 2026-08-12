@@ -11,7 +11,12 @@ def page_shell_styles() -> None:
     st.markdown(
         """
         <style>
-          :root { --ink: #252525; --muted: #6f6f6f; --rule: #dedede; }
+          :root {
+            color-scheme: light;
+            --ink: #252525;
+            --muted: #62686b;
+            --rule: #d9dee1;
+          }
           .stApp { color: var(--ink); }
           [data-testid="stAppViewContainer"],
           [data-testid="stAppViewContainer"] > div:has(> [data-testid="stHeader"]),
