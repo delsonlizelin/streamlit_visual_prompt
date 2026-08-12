@@ -106,6 +106,9 @@ QUESTION_BANK: list[Question] = [
             make_option("F", "技术图或蓝图", "重视结构线稿和标注。", "technical blueprint style, diagram precision", "Blueprint: 结构表达优先。"),
             make_option("G", "3D 玩具或手办", "强调体积和材质。", "stylized 3D toy aesthetic", "Toy-like 3D: 材质和造型可爱化。"),
             make_option("H", "拼贴或混合媒介", "混合照片/纸张/纹理等材料。", "mixed-media collage aesthetic", "Mixed media: 多种材料拼接。"),
+            make_option("I", "水彩或绘本", "柔和颜料边缘与纸面层次。", "watercolor storybook illustration with organic pigment edges", "Watercolor: 适合温暖叙事与绘本。"),
+            make_option("J", "像素艺术", "用清晰像素块和有限色板构成画面。", "intentional pixel art with crisp pixel clusters", "Pixel art: 像素块、有限色板与复古游戏语言。"),
+            make_option("K", "墨水或版画", "强调黑白关系、刀刻感和印刷纹理。", "ink and relief-print illustration", "Printmaking: 高反差墨色与手工印刷感。"),
         ],
     },
     {
