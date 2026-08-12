@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
+import importlib
 import re
 
 import streamlit as st
 
+import ui_components
 from input_documents import InputDocumentError, extract_uploaded_document
 from longread_pdf import GPT_MARKDOWN_PROMPT, RenderError, preflight_markdown, render_markdown
-from ui_components import clipboard_button, page_navigation, page_shell_styles
+from ui_components import clipboard_button, page_navigation
 
 
 SAMPLE = """# 一份适合长时间阅读的 Markdown
@@ -44,6 +45,13 @@ def analyze(markdown_source: str):
 
 
 st.set_page_config(page_title="Markdown PDF", page_icon="📄", layout="wide")
+# A Cloud hot reload can briefly retain the previous component module revision.
+if not hasattr(ui_components, "page_shell_styles"):
+    try:
+        importlib.reload(ui_components)
+    except ImportError:
+        pass
+page_shell_styles = getattr(ui_components, "page_shell_styles", lambda: None)
 page_shell_styles()
 page_navigation("pdf")
 
