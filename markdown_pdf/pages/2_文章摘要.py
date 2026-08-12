@@ -14,7 +14,7 @@ from summarizer import (
     SummaryError,
     summarize_markdown,
 )
-from ui_components import clipboard_button, page_navigation
+from ui_components import clipboard_button, page_navigation, page_shell_styles
 
 
 SAMPLE = """# 一份等待摘要的长文
@@ -53,23 +53,7 @@ def build_summary_long_image(markdown_source: str, mode: str):
 
 
 st.set_page_config(page_title="文章摘要", page_icon="📝", layout="wide")
-st.markdown(
-    """
-    <style>
-      :root { --ink: #252525; --muted: #6f6f6f; --rule: #dedede; }
-      .stApp { color: var(--ink); }
-      [data-testid="stHeader"] { background: rgba(255,255,255,.92); }
-      .block-container { max-width: 1240px; padding-top: 1.5rem; padding-bottom: 4rem; }
-      h1 { letter-spacing: -.025em; }
-      .intro { max-width: 780px; color: var(--muted); font-size: 1.02rem; line-height: 1.7; margin-bottom: 1.2rem; }
-      [data-testid="stFileUploader"] { border: 1px solid var(--rule); border-radius: .45rem; padding: .35rem .65rem; }
-      [data-testid="stMetric"] { border-top: 1px solid var(--rule); padding-top: .65rem; }
-      .stButton button, .stDownloadButton button { border-radius: .35rem; }
-      footer { visibility: hidden; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+page_shell_styles()
 page_navigation("summary")
 
 if "summary_markdown_source" not in st.session_state:

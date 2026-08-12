@@ -6,6 +6,97 @@ import re
 import streamlit as st
 
 
+def page_shell_styles() -> None:
+    """Apply the shared desktop and mobile shell without covering content."""
+    st.markdown(
+        """
+        <style>
+          :root { --ink: #252525; --muted: #6f6f6f; --rule: #dedede; }
+          .stApp { color: var(--ink); }
+          [data-testid="stAppViewContainer"],
+          [data-testid="stAppViewContainer"] > div:has(> [data-testid="stHeader"]),
+          [data-testid="stHeader"] {
+            background-color: inherit !important;
+          }
+          [data-testid="stHeader"] {
+            border-bottom: 1px solid color-mix(in srgb, currentColor 9%, transparent);
+          }
+          .block-container {
+            max-width: 1240px;
+            padding-top: calc(5.75rem + env(safe-area-inset-top));
+            padding-bottom: 4rem;
+          }
+          h1 { letter-spacing: -.025em; }
+          .intro {
+            max-width: 780px;
+            color: var(--muted);
+            font-size: 1.02rem;
+            line-height: 1.7;
+            margin-bottom: 1.2rem;
+          }
+          .mode-note { color: var(--muted); font-size: .88rem; line-height: 1.55; }
+          [data-testid="stFileUploader"] {
+            border: 1px solid var(--rule);
+            border-radius: .45rem;
+            padding: .35rem .65rem;
+          }
+          [data-testid="stMetric"] { border-top: 1px solid var(--rule); padding-top: .65rem; }
+          .stButton button, .stDownloadButton button { border-radius: .35rem; }
+          footer { visibility: hidden; }
+
+          @media (max-width: 768px) {
+            .block-container {
+              padding-top: calc(5.25rem + env(safe-area-inset-top));
+              padding-right: 1rem;
+              padding-bottom: 3rem;
+              padding-left: 1rem;
+            }
+            h1 {
+              margin-top: .35rem;
+              font-size: clamp(2rem, 10vw, 2.5rem);
+              line-height: 1.15;
+            }
+            h2 { font-size: 1.45rem; line-height: 1.25; }
+            h3 { font-size: 1.18rem; line-height: 1.3; }
+            .intro {
+              margin-bottom: .85rem;
+              font-size: .96rem;
+              line-height: 1.65;
+            }
+            [data-testid="stFileUploader"] { padding: .2rem .35rem; }
+            [data-testid="stTextArea"] textarea {
+              min-height: 260px !important;
+              height: 38vh !important;
+              max-height: 360px !important;
+            }
+            [data-testid="stRadio"] div[role="radiogroup"] {
+              flex-wrap: wrap;
+              row-gap: .35rem;
+            }
+            .stButton button, .stDownloadButton button { min-height: 44px; }
+            [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
+              flex-flow: row wrap !important;
+              gap: .65rem !important;
+            }
+            [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > [data-testid="stColumn"] {
+              width: calc(50% - .325rem) !important;
+              min-width: 0 !important;
+              flex: 1 1 calc(50% - .325rem) !important;
+            }
+            [data-testid="stMetric"] {
+              min-height: 82px;
+              padding: .55rem .65rem;
+              border: 1px solid var(--rule);
+              border-radius: .4rem;
+            }
+            [data-testid="stMetricValue"] { font-size: 1.35rem; }
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def page_navigation(current: str) -> None:
     """Render one compact top-level control to the app's other page."""
     if current == "pdf":
