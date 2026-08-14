@@ -40,14 +40,7 @@ body {
   margin: {{PAGE_MARGIN_CSS}};
   background: var(--paper);
 
-  @top-left {
-    content: {{RUNNING_HEADER_CONTENT_CSS}};
-    color: var(--muted);
-    font-family: var(--serif);
-    font-size: 8.8pt;
-    letter-spacing: 0;
-    text-align: left;
-  }
+  @top-left { content: none; }
 
   @top-right { content: none; }
 
@@ -128,17 +121,6 @@ body {
 }
 
 .cover-deck p { margin: 0 0 .65em; }
-
-.cover-meta {
-  position: absolute;
-  left: 30mm;
-  bottom: 25mm;
-  margin: 0;
-  color: var(--muted);
-  font-family: var(--sans);
-  font-size: 8.5pt;
-  letter-spacing: 0;
-}
 
 .toc-page {
   page: toc;
@@ -402,13 +384,6 @@ body.mode-tablet {
   line-height: 1.68;
 }
 
-.mode-tablet .cover-meta {
-  left: 16mm;
-  bottom: 14mm;
-  font-family: var(--serif);
-  font-size: 8.8pt;
-}
-
 .mode-tablet .toc-page h1 {
   margin-bottom: 8mm;
   font-size: 18.5pt;
@@ -468,13 +443,6 @@ body.mode-mobile {
   padding-top: 5mm;
   font-size: 11.5pt;
   line-height: 1.7;
-}
-
-.mode-mobile .cover-meta {
-  left: 12mm;
-  bottom: 12mm;
-  font-family: var(--serif);
-  font-size: 8.8pt;
 }
 
 .mode-mobile .toc-page h1 {

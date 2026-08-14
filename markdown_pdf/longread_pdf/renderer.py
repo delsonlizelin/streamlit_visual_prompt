@@ -281,10 +281,6 @@ def _short_running_title(title: str) -> str:
     return compact if len(compact) <= 26 else f"{compact[:25]}…"
 
 
-def _css_string(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\r", " ").replace("\n", " ")
-
-
 def _inline_markdown(value: str) -> str:
     rendered = markdown_lib.markdown(_parser_compatible(value), extensions=["extra"], output_format="html5")
     rendered = bleach.clean(rendered, tags={"p", "strong", "em", "a", "code"}, attributes={"a": ["href", "title"]}, strip=True)
@@ -297,7 +293,7 @@ def _fill(source: str, values: dict[str, str]) -> str:
     return source
 
 
-def _mode_css(mode: str, running_title: str) -> str:
+def _mode_css(mode: str) -> str:
     profile = MODE_PROFILES[mode]
     return _fill((ASSET_DIR / "longread.css").read_text(encoding="utf-8"), {
         "PAGE_SIZE_CSS": profile["page_size"],
@@ -305,13 +301,12 @@ def _mode_css(mode: str, running_title: str) -> str:
         "PAGE_HEIGHT_CSS": profile["page_height"],
         "PAGE_MARGIN_CSS": profile["page_margin"],
         "TOC_MARGIN_CSS": profile["toc_margin"],
-        "RUNNING_HEADER_CONTENT_CSS": f'"{_css_string(running_title)}"' if mode == "desktop" else "none",
         "BOTTOM_LEFT_CONTENT_CSS": profile["bottom_left"],
         "BOTTOM_CENTER_CONTENT_CSS": profile["bottom_center"],
     })
 
 
-def build_document(markdown_source: str, mode: str = "desktop", short_title: str = "") -> DocumentBuild:
+def build_document(markdown_source: str, mode: str = "desktop") -> DocumentBuild:
     if mode not in ALLOWED_MODES:
         raise RenderError(f"未知模式：{mode}")
     if not markdown_source.strip():
@@ -320,8 +315,8 @@ def build_document(markdown_source: str, mode: str = "desktop", short_title: str
     normalized, changed_lines = normalize_markdown(markdown_source)
     title, deck, body = _extract_front(normalized)
     article_html, toc = _render_article(body)
-    running_title = short_title.strip() or _short_running_title(title)
-    css = _mode_css(mode, running_title)
+    running_title = ""
+    css = _mode_css(mode)
     deck_html = "\n".join(f"<p>{_inline_markdown(line)}</p>" for line in deck) if deck else "<p>适合专注阅读的长文版本</p>"
     toc_html = "\n".join(
         f'<li><a href="#{identifier}">{html_lib.escape(label)}</a></li>' for identifier, label in toc
@@ -332,8 +327,6 @@ def build_document(markdown_source: str, mode: str = "desktop", short_title: str
         "BASE_URL": "",
         "MODE": mode,
         "TITLE": html_lib.escape(title),
-        "SHORT_TITLE": html_lib.escape(running_title),
-        "DATE": datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y年%-m月%-d日"),
         "DECK": deck_html,
         "TOC": toc_html,
         "CONTENT": article_html,
@@ -360,7 +353,7 @@ def build_summary_document(
     article_html, toc = _render_article(body)
     running_title = _short_running_title(title)
     css_parts = [
-        _mode_css(mode, running_title),
+        _mode_css(mode),
         (ASSET_DIR / "summary.css").read_text(encoding="utf-8"),
     ]
     if continuous:
@@ -512,8 +505,8 @@ def _render_paged_document(build: DocumentBuild, *, mode: str) -> RenderResult:
     )
 
 
-def render_markdown(markdown_source: str, mode: str = "desktop", short_title: str = "") -> RenderResult:
-    build = build_document(markdown_source, mode=mode, short_title=short_title)
+def render_markdown(markdown_source: str, mode: str = "desktop") -> RenderResult:
+    build = build_document(markdown_source, mode=mode)
     return _render_paged_document(build, mode=mode)
 
 

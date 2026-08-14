@@ -37,6 +37,18 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertIn('"复制摘要系统提示词"', source)
         self.assertIn("SYSTEM_PROMPT", source)
 
+    def test_download_names_do_not_include_output_mode(self) -> None:
+        pdf_source = (APP_ROOT / "streamlit_app.py").read_text(encoding="utf-8")
+        summary_source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
+        self.assertIn(
+            'filename = f"{safe_filename(st.session_state.pdf_output_name)}.pdf"',
+            pdf_source,
+        )
+        self.assertNotIn("result.mode}.pdf", pdf_source)
+        self.assertIn('file_name=f"{output_name}.summary.pdf"', summary_source)
+        self.assertIn('file_name=f"{output_name}.summary.png"', summary_source)
+        self.assertNotIn("summary.{export['mode']}", summary_source)
+
 
 if __name__ == "__main__":
     unittest.main()

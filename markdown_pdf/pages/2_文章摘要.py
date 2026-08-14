@@ -45,7 +45,7 @@ def export_download_button(export: dict, *, key: str) -> None:
         st.download_button(
             f"下载 {export['mode']} PDF",
             data=artifact.pdf,
-            file_name=f"{output_name}.summary.{export['mode']}.pdf",
+            file_name=f"{output_name}.summary.pdf",
             mime="application/pdf",
             icon=":material/download:",
             width="stretch",
@@ -56,7 +56,7 @@ def export_download_button(export: dict, *, key: str) -> None:
         st.download_button(
             f"下载 {export['mode']} PNG 长图",
             data=artifact.png,
-            file_name=f"{output_name}.summary.{export['mode']}.png",
+            file_name=f"{output_name}.summary.png",
             mime="image/png",
             icon=":material/download:",
             width="stretch",

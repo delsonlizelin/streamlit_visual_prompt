@@ -23,7 +23,7 @@ SAMPLE = """# 一份适合长时间阅读的 Markdown
 
 ## Three reading modes
 
-Desktop mode uses an A4 page and a quiet running header. Tablet mode follows the iPad mini portrait ratio. Mobile mode uses a 9:16 page, larger type, shorter lines, and no running header.
+Desktop mode uses an A4 page. Tablet mode follows the iPad mini portrait ratio. Mobile mode uses a 9:16 page, larger type, and shorter lines.
 
 > 好的排版不需要抢走文字本身的注意力。
 """
@@ -35,8 +35,8 @@ def safe_filename(value: str) -> str:
 
 
 @st.cache_data(show_spinner=False, max_entries=8)
-def generate(markdown_source: str, mode: str, short_title: str):
-    return render_markdown(markdown_source, mode=mode, short_title=short_title)
+def generate(markdown_source: str, mode: str):
+    return render_markdown(markdown_source, mode=mode)
 
 
 @st.cache_data(show_spinner=False, max_entries=24)
@@ -69,7 +69,7 @@ st.markdown(
 result = st.session_state.get("render_result")
 if result:
     st.success("PDF 已生成，可以直接下载。", icon=":material/check_circle:")
-    filename = f"{safe_filename(st.session_state.pdf_output_name)}.{result.mode}.pdf"
+    filename = f"{safe_filename(st.session_state.pdf_output_name)}.pdf"
     st.download_button(
         "下载 PDF",
         data=result.pdf,
@@ -153,15 +153,8 @@ with input_panel:
         )
         mode = mode_options[mode_label]
         st.markdown(
-            '<p class="mode-note">电脑端适合大屏与打印；平板端匹配 iPad mini 竖屏比例；手机端采用更大字号和更短行宽。平板与手机均取消页眉。</p>',
+            '<p class="mode-note">电脑端适合大屏与打印；平板端匹配 iPad mini 竖屏比例；手机端采用更大字号和更短行宽。</p>',
             unsafe_allow_html=True,
-        )
-        short_title = st.text_input(
-            "短页眉标题（可选）",
-            max_chars=40,
-            disabled=mode != "desktop",
-            help="留空时会从封面标题自动截取。平板版与手机版不显示页眉。",
-            key="pdf_short_title",
         )
         output_name = st.text_input("下载文件名", key="pdf_output_name")
 
@@ -199,7 +192,7 @@ with input_panel:
             else:
                 try:
                     with st.spinner("正在排版和分页…"):
-                        st.session_state.render_result = generate(markdown_source, mode, short_title)
+                        st.session_state.render_result = generate(markdown_source, mode)
                         st.session_state.render_source_digest = hashlib.sha256(
                             markdown_source.encode("utf-8")
                         ).hexdigest()

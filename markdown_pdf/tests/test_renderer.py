@@ -23,12 +23,14 @@ class RendererTests(unittest.TestCase):
         self.assertEqual(normalized, "这是**重点**。")
         self.assertEqual(changes, 1)
 
-    def test_desktop_document_has_serif_running_header(self):
+    def test_desktop_document_has_no_running_header_or_cover_footer(self):
         document = build_document("# 标题\n> 副标题\n\n## 第一章\n\n正文。", mode="desktop")
         self.assertIn('class="mode-desktop"', document.html)
         self.assertIn("size: A4", document.html)
-        self.assertIn('content: "标题"', document.html)
-        self.assertIn("font-family: var(--serif)", document.html)
+        self.assertNotIn("data-running-title", document.html)
+        self.assertNotIn('class="cover-meta"', document.html)
+        self.assertNotIn("阅读版", document.html)
+        self.assertIn("@top-left { content: none; }", document.html)
 
     def test_mobile_document_suppresses_running_header(self):
         document = build_document("# 标题\n\n## 第一章\n\n正文。", mode="mobile")
