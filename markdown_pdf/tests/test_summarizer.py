@@ -65,10 +65,11 @@ class SummarizerTests(unittest.TestCase):
         self.assertIn("3 到 5 条互不重复的要点", standard)
         self.assertIn("摘要长度可以随有效章节数量增加", section)
         self.assertIn("按 3 到 6 个主题分组", section)
-        self.assertIn("没有相关背景知识", explain)
+        self.assertIn("对主题一无所知", explain)
         self.assertIn("原文未说明", explain)
         self.assertIn("一句话理解：", explain)
-        self.assertIn("避免循环定义", explain)
+        self.assertIn("每句话只讲一个意思", explain)
+        self.assertIn("具体、日常、能形成画面的类比", explain)
 
     def test_prompt_template_contains_system_mode_language_and_placeholder(self):
         prompt = build_prompt_template(mode="standard", language="zh")
@@ -157,7 +158,7 @@ class SummarizerTests(unittest.TestCase):
             )
 
         body = json.loads(captured["request"].data.decode("utf-8"))
-        self.assertEqual(body["max_tokens"], 3200)
+        self.assertEqual(body["max_tokens"], 2400)
 
     def test_summarize_markdown_rejects_missing_inputs(self):
         with self.assertRaisesRegex(SummaryError, "不能为空"):
