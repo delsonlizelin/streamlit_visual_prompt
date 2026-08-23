@@ -147,9 +147,9 @@ if source_method == "upload":
     uploaded = st.file_uploader(
         "选择 Markdown、TXT 或普通文本型 PDF",
         type=["md", "markdown", "txt", "pdf"],
-        max_upload_size=20,
+        max_upload_size=100,
         key="summary_file_input",
-        help="PDF 会先提取为可编辑文字；扫描件或图片型 PDF 需要先做 OCR。",
+        help="单个文件最多 100 MB。PDF 会先提取为可编辑文字；扫描件或图片型 PDF 需要先做 OCR。",
     )
     if uploaded is not None:
         payload = uploaded.getvalue()

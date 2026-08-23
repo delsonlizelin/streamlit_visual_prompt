@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+from io import BytesIO
 import unittest
 
-from url_documents import UrlDocumentError, extract_article_html, normalize_public_url
+from url_documents import (
+    MAX_URL_BYTES,
+    UrlDocumentError,
+    _read_bounded_response,
+    extract_article_html,
+    normalize_public_url,
+)
 
 
 def public_resolver(_hostname: str) -> list[str]:
@@ -10,6 +17,12 @@ def public_resolver(_hostname: str) -> list[str]:
 
 
 class UrlDocumentTests(unittest.TestCase):
+    def test_url_response_limit_is_large_but_still_bounded(self):
+        self.assertEqual(MAX_URL_BYTES, 25 * 1024 * 1024)
+        self.assertEqual(_read_bounded_response(BytesIO(b"x" * 10), max_bytes=10), b"x" * 10)
+        with self.assertRaisesRegex(UrlDocumentError, "无法安全读取"):
+            _read_bounded_response(BytesIO(b"x" * 11), max_bytes=10)
+
     def test_url_without_scheme_defaults_to_https_and_drops_fragment(self):
         value = normalize_public_url(
             "mp.weixin.qq.com/s/example?from=share#wechat_redirect",

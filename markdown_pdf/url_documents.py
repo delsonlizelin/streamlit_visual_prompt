@@ -10,13 +10,25 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
-MAX_URL_BYTES = 5 * 1024 * 1024
+MAX_URL_BYTES = 25 * 1024 * 1024
 MIN_ARTICLE_CHARACTERS = 120
 DEFAULT_TIMEOUT = 20
 
 
 class UrlDocumentError(RuntimeError):
     """A user-facing web-article extraction error."""
+
+
+def _read_bounded_response(response, *, max_bytes: int = MAX_URL_BYTES) -> bytes:  # noqa: ANN001
+    """Read one byte past the limit so oversized responses fail without growing forever."""
+    payload = response.read(max_bytes + 1)
+    if len(payload) > max_bytes:
+        limit_mb = max(1, (max_bytes + 1024 * 1024 - 1) // (1024 * 1024))
+        raise UrlDocumentError(
+            f"网页响应超过 {limit_mb} MB，无法安全读取；"
+            "请复制正文，或将文章下载为 PDF 后上传。"
+        )
+    return payload
 
 
 @dataclass(frozen=True)
@@ -305,9 +317,7 @@ def fetch_url_document(value: str, *, timeout: int = DEFAULT_TIMEOUT) -> Extract
             content_type = response.headers.get_content_type().lower()
             if content_type not in {"text/html", "application/xhtml+xml"}:
                 raise UrlDocumentError("这个网址不是可读取的网页文章。")
-            payload = response.read(MAX_URL_BYTES + 1)
-            if len(payload) > MAX_URL_BYTES:
-                raise UrlDocumentError("网页超过 5 MB，请改为粘贴正文或上传文件。")
+            payload = _read_bounded_response(response)
             charset = response.headers.get_content_charset() or "utf-8"
     except UrlDocumentError:
         raise

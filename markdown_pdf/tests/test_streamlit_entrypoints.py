@@ -56,6 +56,7 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertIn('"paste": "粘贴文字"', source)
         self.assertIn('"upload": "上传文件"', source)
         self.assertIn('"url": "文章网址"', source)
+        self.assertIn("max_upload_size=100", source)
         self.assertIn('"重新读取这个文件"', source)
 
     def test_download_names_do_not_include_output_mode(self) -> None:
