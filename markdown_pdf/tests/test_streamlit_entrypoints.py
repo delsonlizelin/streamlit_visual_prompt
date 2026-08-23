@@ -32,10 +32,17 @@ class StreamlitEntrypointTests(unittest.TestCase):
                     self.assertEqual(list(app.exception), [])
                     self.assertTrue(hasattr(stale_components, "page_shell_styles"))
 
-    def test_summary_page_exposes_system_prompt_copy_button(self) -> None:
+    def test_summary_page_exposes_current_prompt_copy_button(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
-        self.assertIn('"复制摘要系统提示词"', source)
-        self.assertIn("SYSTEM_PROMPT", source)
+        self.assertIn('"复制当前模式提示词"', source)
+        self.assertIn("build_prompt_template", source)
+
+    def test_summary_page_keeps_all_source_methods_visible_in_one_control(self) -> None:
+        source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
+        self.assertIn('"paste": "粘贴文字"', source)
+        self.assertIn('"upload": "上传文件"', source)
+        self.assertIn('"url": "文章网址"', source)
+        self.assertIn('"重新读取这个文件"', source)
 
     def test_download_names_do_not_include_output_mode(self) -> None:
         pdf_source = (APP_ROOT / "streamlit_app.py").read_text(encoding="utf-8")

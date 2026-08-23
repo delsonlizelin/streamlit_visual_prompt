@@ -17,19 +17,34 @@ MAX_SOURCE_CHARACTERS = 300_000
 
 MODE_INSTRUCTIONS: dict[SummaryMode, str] = {
     "brief": (
-        "生成“快速概览”。使用一个一级标题和一个紧凑段落，用 3 到 5 句话说明主题、核心结论、"
-        "结论依据以及最重要的条件或例外。不要使用列表。"
+        "生成“快速概览”，让读者在一分钟内判断文章讲什么、得出什么结论以及是否值得细读。"
+        "忽略原文的章节结构，使用一个一级标题和一个紧凑段落；全文严格限制为 3 到 5 句话，"
+        "依次覆盖主题、核心结论、最强依据以及会改变结论的关键条件或例外。不要使用列表或二级标题。"
     ),
     "standard": (
-        "生成“核心摘要”。一级标题后先用一个以粗体“结论：”开头的段落给出一句话结论；"
-        "然后使用二级标题“核心要点”，列出 3 到 5 条互不重复的要点。"
+        "生成“核心摘要”，用于日常阅读、转发和快速决策。不要按原文章节逐节复述；"
+        "应跨章节合并重复内容并重组信息。一级标题后先用一个以粗体“结论：”开头的段落"
+        "给出一句话结论；然后使用二级标题“核心要点”，列出 3 到 5 条互不重复的要点。"
         "只有原文确实包含会改变理解的风险、限制或例外时，才增加“限制与例外”二级标题，最多 3 条。"
     ),
     "section": (
-        "生成“分章节摘要”。一级标题后先用一个以粗体“总览：”开头的短段落；"
-        "再按原文主要章节顺序保留章节名称，每节只列 1 到 2 条最重要信息。"
+        "生成“按章节梳理”，用于报告、课程记录或结构清晰的长文。一级标题后先用一个以粗体"
+        "“总览：”开头的短段落；再按原文主要章节顺序保留章节名称，每节只列 1 到 2 条最重要信息，"
+        "摘要长度可以随有效章节数量增加。原文没有明确章节时，按 3 到 6 个主题分组，不要虚构原文结构。"
         "最后用一个以粗体“结论：”开头的段落收束，不额外添加“总结”标题。"
     ),
+}
+
+MODE_LABELS: dict[SummaryMode, str] = {
+    "brief": "快速概览",
+    "standard": "核心摘要（推荐）",
+    "section": "按章节梳理",
+}
+
+MODE_CAPTIONS: dict[SummaryMode, str] = {
+    "brief": "3–5 句，不列要点 · 先判断文章讲什么、是否值得细读",
+    "standard": "一句结论 + 3–5 个要点 · 适合日常阅读、转发和决策",
+    "section": "沿原文结构逐节提炼 · 适合报告、课程与结构化长文",
 }
 
 LANGUAGE_INSTRUCTIONS: dict[SummaryLanguage, str] = {
@@ -100,6 +115,17 @@ def build_messages(
             ),
         },
     ]
+
+
+def build_prompt_template(*, mode: SummaryMode, language: SummaryLanguage) -> str:
+    """Return the exact prompt structure with a safe placeholder for reuse."""
+    messages = build_messages("{{在这里粘贴原文}}", mode=mode, language=language)
+    return (
+        "【系统提示词】\n"
+        f"{messages[0]['content']}\n\n"
+        "【当前任务】\n"
+        f"{messages[1]['content']}"
+    )
 
 
 def _response_content(payload: dict[str, Any]) -> tuple[str, int, int]:

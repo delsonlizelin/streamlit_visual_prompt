@@ -10,6 +10,7 @@ from summarizer.deepseek import (
     SYSTEM_PROMPT,
     SummaryError,
     build_messages,
+    build_prompt_template,
     summarize_markdown,
 )
 
@@ -47,10 +48,31 @@ class SummarizerTests(unittest.TestCase):
         self.assertIn("不使用三级及以下标题", messages[0]["content"])
         self.assertIn("不裸露长 URL", messages[0]["content"])
         self.assertIn("不要输出检查过程", messages[0]["content"])
-        self.assertIn("分章节摘要", messages[1]["content"])
+        self.assertIn("按章节梳理", messages[1]["content"])
         self.assertIn("每节只列 1 到 2 条", messages[1]["content"])
         self.assertIn("使用简体中文", messages[1]["content"])
         self.assertIn("<document>", messages[1]["content"])
+
+    def test_modes_have_distinct_output_contracts(self):
+        brief = build_messages("# 标题", mode="brief", language="zh")[1]["content"]
+        standard = build_messages("# 标题", mode="standard", language="zh")[1]["content"]
+        section = build_messages("# 标题", mode="section", language="zh")[1]["content"]
+
+        self.assertIn("严格限制为 3 到 5 句话", brief)
+        self.assertIn("不要使用列表或二级标题", brief)
+        self.assertIn("不要按原文章节逐节复述", standard)
+        self.assertIn("3 到 5 条互不重复的要点", standard)
+        self.assertIn("摘要长度可以随有效章节数量增加", section)
+        self.assertIn("按 3 到 6 个主题分组", section)
+
+    def test_prompt_template_contains_system_mode_language_and_placeholder(self):
+        prompt = build_prompt_template(mode="standard", language="zh")
+        self.assertIn("【系统提示词】", prompt)
+        self.assertIn(SYSTEM_PROMPT, prompt)
+        self.assertIn("【当前任务】", prompt)
+        self.assertIn("核心摘要", prompt)
+        self.assertIn("使用简体中文", prompt)
+        self.assertIn("{{在这里粘贴原文}}", prompt)
 
     def test_build_messages_rejects_unknown_mode(self):
         with self.assertRaisesRegex(SummaryError, "未知摘要模式"):
