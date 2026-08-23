@@ -1,9 +1,178 @@
 from __future__ import annotations
 
+import base64
 import json
 import re
 
 import streamlit as st
+
+
+_AUTO_ARTICLE_URL_INPUT = st.components.v2.component(
+    "auto_article_url_input",
+    html="""
+      <label for="article-url">文章网址</label>
+      <input id="article-url" type="url" inputmode="url"
+             autocomplete="url" autocapitalize="none" spellcheck="false"
+             placeholder="https://mp.weixin.qq.com/s/...">
+      <p>粘贴完整网址后自动读取，无需回车。</p>
+    """,
+    css="""
+      :host { display: block; }
+      label {
+        display: block;
+        margin: 0 0 .45rem;
+        color: var(--st-text-color);
+        font: 400 .875rem/1.35 var(--st-font);
+      }
+      input {
+        width: 100%;
+        min-height: 42px;
+        box-sizing: border-box;
+        padding: .5rem .75rem;
+        border: 1px solid var(--st-border-color);
+        border-radius: var(--st-base-radius);
+        background: var(--st-background-color);
+        color: var(--st-text-color);
+        font: 400 1rem/1.4 var(--st-font);
+        outline: none;
+      }
+      input:focus {
+        border-color: var(--st-primary-color);
+        box-shadow: 0 0 0 1px var(--st-primary-color);
+      }
+      p {
+        margin: .4rem 0 0;
+        color: var(--st-text-color);
+        opacity: .68;
+        font: 400 .82rem/1.45 var(--st-font);
+      }
+      @media (pointer: coarse) { input { min-height: 44px; } }
+    """,
+    js="""
+      export default function(component) {
+        const { parentElement, data, setStateValue } = component;
+        const input = parentElement.querySelector("input");
+        const incoming = typeof data?.value === "string" ? data.value : "";
+        if (document.activeElement !== input && input.value !== incoming) {
+          input.value = incoming;
+        }
+
+        let timer;
+        const publish = () => {
+          const value = input.value.trim();
+          if (!value) {
+            if (incoming) setStateValue("url", "");
+            return;
+          }
+          const looksLikeUrl = /^(https?:\\/\\/)?[^\\s/]+\\.[^\\s]+$/i.test(value);
+          if (looksLikeUrl && value !== incoming) setStateValue("url", value);
+        };
+        const schedule = (delay) => {
+          window.clearTimeout(timer);
+          timer = window.setTimeout(publish, delay);
+        };
+        const onInput = () => schedule(800);
+        const onPaste = () => schedule(60);
+        input.addEventListener("input", onInput);
+        input.addEventListener("paste", onPaste);
+        return () => {
+          window.clearTimeout(timer);
+          input.removeEventListener("input", onInput);
+          input.removeEventListener("paste", onPaste);
+        };
+      }
+    """,
+)
+
+
+_NATIVE_IMAGE_SHARE = st.components.v2.component(
+    "native_image_share",
+    html="""
+      <button type="button" hidden>分享长图</button>
+      <p role="status" aria-live="polite"></p>
+    """,
+    css="""
+      :host { display: block; }
+      button {
+        width: 100%;
+        min-height: 42px;
+        padding: .5rem 1rem;
+        border: 1px solid var(--st-border-color);
+        border-radius: var(--st-base-radius);
+        background: var(--st-background-color);
+        color: var(--st-text-color);
+        font: 500 .9rem/1.4 var(--st-font);
+        cursor: pointer;
+      }
+      button:active { background: var(--st-secondary-background-color); }
+      p {
+        margin: .35rem 0 0;
+        color: var(--st-text-color);
+        opacity: .72;
+        font: 400 .8rem/1.4 var(--st-font);
+      }
+      p:empty { display: none; }
+      @media (pointer: coarse) { button { min-height: 44px; } }
+    """,
+    js="""
+      export default function(component) {
+        const { parentElement, data } = component;
+        const button = parentElement.querySelector("button");
+        const status = parentElement.querySelector('[role="status"]');
+        const supported = typeof navigator.share === "function" &&
+          typeof window.File === "function";
+        button.hidden = !supported;
+
+        const share = async () => {
+          status.textContent = "";
+          try {
+            const binary = window.atob(data.base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let index = 0; index < binary.length; index += 1) {
+              bytes[index] = binary.charCodeAt(index);
+            }
+            const file = new File([bytes], data.filename, { type: "image/png" });
+            if (navigator.canShare && !navigator.canShare({ files: [file] })) {
+              throw new Error("file-sharing-unavailable");
+            }
+            await navigator.share({
+              files: [file],
+              title: data.title,
+            });
+          } catch (error) {
+            if (error?.name !== "AbortError") {
+              status.textContent = "无法调出分享菜单，请长按图片或使用下载按钮。";
+            }
+          }
+        };
+        button.addEventListener("click", share);
+        return () => button.removeEventListener("click", share);
+      }
+    """,
+)
+
+
+def auto_article_url_input(value: str, *, key: str) -> str:
+    """Return a complete pasted or typed URL without requiring Enter."""
+    result = _AUTO_ARTICLE_URL_INPUT(
+        data={"value": value},
+        default={"url": value},
+        key=key,
+        on_url_change=lambda: None,
+    )
+    return str(result.url or "").strip()
+
+
+def native_image_share(png: bytes, filename: str, *, key: str) -> None:
+    """Show the native file share action when the browser supports Web Share."""
+    _NATIVE_IMAGE_SHARE(
+        data={
+            "base64": base64.b64encode(png).decode("ascii"),
+            "filename": filename,
+            "title": "文章摘要长图",
+        },
+        key=key,
+    )
 
 
 def page_shell_styles() -> None:
