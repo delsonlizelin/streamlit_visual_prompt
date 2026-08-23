@@ -37,6 +37,20 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertIn('"复制当前模式提示词"', source)
         self.assertIn("build_prompt_template", source)
 
+    def test_summary_page_exposes_four_distinct_summary_modes(self) -> None:
+        app = AppTest.from_file(
+            APP_ROOT / "pages" / "2_文章摘要.py",
+            default_timeout=10,
+        ).run()
+        mode_control = next(radio for radio in app.radio if radio.label == "摘要方式")
+        self.assertEqual(
+            mode_control.options,
+            ["快速概览", "核心摘要（推荐）", "按章节梳理", "零基础讲解"],
+        )
+        mode_control.set_value("零基础讲解").run()
+        self.assertEqual(mode_control.value, "零基础讲解")
+        self.assertEqual(list(app.exception), [])
+
     def test_summary_page_keeps_all_source_methods_visible_in_one_control(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
         self.assertIn('"paste": "粘贴文字"', source)

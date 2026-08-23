@@ -222,7 +222,7 @@ if input_meta:
     )
 
 result = st.session_state.get("summary_result")
-mode_order = ["brief", "standard", "section"]
+mode_order = ["brief", "standard", "section", "explain"]
 mode_labels = [MODE_LABELS[mode] for mode in mode_order]
 language_options = {
     "跟随原文": "source",

@@ -57,6 +57,7 @@ class SummarizerTests(unittest.TestCase):
         brief = build_messages("# 标题", mode="brief", language="zh")[1]["content"]
         standard = build_messages("# 标题", mode="standard", language="zh")[1]["content"]
         section = build_messages("# 标题", mode="section", language="zh")[1]["content"]
+        explain = build_messages("# 标题", mode="explain", language="zh")[1]["content"]
 
         self.assertIn("严格限制为 3 到 5 句话", brief)
         self.assertIn("不要使用列表或二级标题", brief)
@@ -64,6 +65,10 @@ class SummarizerTests(unittest.TestCase):
         self.assertIn("3 到 5 条互不重复的要点", standard)
         self.assertIn("摘要长度可以随有效章节数量增加", section)
         self.assertIn("按 3 到 6 个主题分组", section)
+        self.assertIn("没有相关背景知识", explain)
+        self.assertIn("原文未说明", explain)
+        self.assertIn("一句话理解：", explain)
+        self.assertIn("避免循环定义", explain)
 
     def test_prompt_template_contains_system_mode_language_and_placeholder(self):
         prompt = build_prompt_template(mode="standard", language="zh")
@@ -121,6 +126,38 @@ class SummarizerTests(unittest.TestCase):
         self.assertEqual(result.summary, "# 摘要\n\n- 保留重要事实。")
         self.assertEqual(result.prompt_tokens, 42)
         self.assertEqual(result.completion_tokens, 9)
+
+    def test_explain_mode_uses_room_for_a_teaching_structure(self):
+        captured = {}
+        payload = {
+            "model": DEFAULT_MODEL,
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {"summary": "# 讲解\n\n**一句话理解：** 核心意思。"},
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ],
+            "usage": {},
+        }
+
+        def fake_urlopen(request, timeout):
+            captured["request"] = request
+            return FakeResponse(payload)
+
+        with patch("summarizer.deepseek.urlopen", side_effect=fake_urlopen):
+            summarize_markdown(
+                "# 原文\n\n正文。",
+                mode="explain",
+                language="zh",
+                api_key="test-key",
+            )
+
+        body = json.loads(captured["request"].data.decode("utf-8"))
+        self.assertEqual(body["max_tokens"], 3200)
 
     def test_summarize_markdown_rejects_missing_inputs(self):
         with self.assertRaisesRegex(SummaryError, "不能为空"):

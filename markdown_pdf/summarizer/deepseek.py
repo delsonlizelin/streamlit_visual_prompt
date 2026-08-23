@@ -8,7 +8,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
-SummaryMode = Literal["brief", "standard", "section"]
+SummaryMode = Literal["brief", "standard", "section", "explain"]
 SummaryLanguage = Literal["source", "zh", "en"]
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
@@ -33,18 +33,32 @@ MODE_INSTRUCTIONS: dict[SummaryMode, str] = {
         "摘要长度可以随有效章节数量增加。原文没有明确章节时，按 3 到 6 个主题分组，不要虚构原文结构。"
         "最后用一个以粗体“结论：”开头的段落收束，不额外添加“总结”标题。"
     ),
+    "explain": (
+        "生成“零基础讲解”，面向第一次接触这个主题、没有相关背景知识但希望真正理解内容的读者。"
+        "目标是降低理解门槛，而不是最大限度压缩篇幅，也不是使用幼儿化或居高临下的语气。"
+        "只使用原文提供的信息：补齐原文能够支持的最低必要背景，把术语、缩写和抽象表达换成日常语言，"
+        "并把原文支持的因果、步骤或论证按由浅入深的顺序讲清楚；如果理解所需的背景在原文中缺失，"
+        "必须明确写“原文未说明”，不得凭常识补写事实。一级标题后先用一个以粗体“一句话理解：”"
+        "开头的短段落说明核心意思；再使用二级标题“先知道这些”，用 2 到 4 条解释关键概念、人物或前提；"
+        "然后使用二级标题“一步步讲清楚”，用 3 到 6 条互不重复的要点串起机制、因果或论证，"
+        "术语首次出现时立即用括号或短句解释。只有能帮助理解且不改变事实时才使用一个简短类比，"
+        "并明确它只是类比。只有确有必要时才增加“容易误解的地方”，最多 3 条，说明边界、例外或"
+        "不确定性；最后用一个以粗体“记住：”开头的短段落收束。避免循环定义、未解释的缩写和过度简化。"
+    ),
 }
 
 MODE_LABELS: dict[SummaryMode, str] = {
     "brief": "快速概览",
     "standard": "核心摘要（推荐）",
     "section": "按章节梳理",
+    "explain": "零基础讲解",
 }
 
 MODE_CAPTIONS: dict[SummaryMode, str] = {
     "brief": "3–5 句，不列要点 · 先判断文章讲什么、是否值得细读",
     "standard": "一句结论 + 3–5 个要点 · 适合日常阅读、转发和决策",
     "section": "沿原文结构逐节提炼 · 适合报告、课程与结构化长文",
+    "explain": "补背景、释术语、讲因果 · 适合第一次接触这个主题",
 }
 
 LANGUAGE_INSTRUCTIONS: dict[SummaryLanguage, str] = {
@@ -178,7 +192,12 @@ def summarize_markdown(
         "messages": build_messages(source, mode=mode, language=language),
         "thinking": {"type": "disabled"},
         "temperature": 0.2,
-        "max_tokens": {"brief": 900, "standard": 1800, "section": 4500}[mode],
+        "max_tokens": {
+            "brief": 900,
+            "standard": 1800,
+            "section": 4500,
+            "explain": 3200,
+        }[mode],
         "response_format": {"type": "json_object"},
         "stream": False,
     }
