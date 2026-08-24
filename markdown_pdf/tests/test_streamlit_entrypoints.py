@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 
+from summarizer import deepseek as summarizer_backend
+
 
 APP_ROOT = Path(__file__).resolve().parent.parent
 
@@ -31,6 +33,18 @@ class StreamlitEntrypointTests(unittest.TestCase):
                     app.run()
                     self.assertEqual(list(app.exception), [])
                     self.assertTrue(hasattr(stale_components, "page_shell_styles"))
+
+    def test_summary_page_ignores_stale_summarizer_re_exports(self) -> None:
+        stale_summarizer = ModuleType("summarizer")
+        stale_summarizer.__path__ = [str(APP_ROOT / "summarizer")]
+        stale_summarizer.deepseek = summarizer_backend
+        with patch.dict("sys.modules", {"summarizer": stale_summarizer}):
+            app = AppTest.from_file(
+                APP_ROOT / "pages" / "2_文章摘要.py",
+                default_timeout=10,
+            ).run()
+
+        self.assertEqual(list(app.exception), [])
 
     def test_summary_page_exposes_current_prompt_copy_button(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")

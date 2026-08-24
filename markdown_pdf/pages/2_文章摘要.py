@@ -9,7 +9,7 @@ import streamlit as st
 import ui_components
 from input_documents import InputDocumentError, extract_uploaded_document
 from longread_pdf import RenderError, render_summary_long_image, render_summary_pdf
-from summarizer import (
+from summarizer.deepseek import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
     MAX_SOURCE_CHARACTERS,
