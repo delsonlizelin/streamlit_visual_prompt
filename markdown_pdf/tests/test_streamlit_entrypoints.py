@@ -46,6 +46,17 @@ class StreamlitEntrypointTests(unittest.TestCase):
 
         self.assertEqual(list(app.exception), [])
 
+    def test_summary_page_reloads_stale_summarizer_backend(self) -> None:
+        stale_backend = ModuleType("summarizer.deepseek")
+        with patch.dict("sys.modules", {"summarizer.deepseek": stale_backend}):
+            app = AppTest.from_file(
+                APP_ROOT / "pages" / "2_文章摘要.py",
+                default_timeout=10,
+            ).run()
+
+        self.assertEqual(list(app.exception), [])
+        self.assertTrue(hasattr(stale_backend, "STYLE_LABELS"))
+
     def test_summary_page_exposes_current_prompt_copy_button(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
         self.assertIn('"复制当前提示词"', source)

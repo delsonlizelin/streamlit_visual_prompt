@@ -9,20 +9,36 @@ import streamlit as st
 import ui_components
 from input_documents import InputDocumentError, extract_uploaded_document
 from longread_pdf import RenderError, render_summary_long_image, render_summary_pdf
-from summarizer.deepseek import (
-    DEFAULT_BASE_URL,
-    DEFAULT_MODEL,
-    MAX_SOURCE_CHARACTERS,
-    MODE_CAPTIONS,
-    MODE_LABELS,
-    STYLE_CAPTIONS,
-    STYLE_LABELS,
-    SummaryError,
-    build_prompt_template,
-    summarize_markdown,
-)
 from ui_components import clipboard_button, page_navigation
 from url_documents import UrlDocumentError, fetch_url_document
+
+
+SUMMARIZER_SYMBOLS = (
+    "DEFAULT_BASE_URL",
+    "DEFAULT_MODEL",
+    "MAX_SOURCE_CHARACTERS",
+    "MODE_CAPTIONS",
+    "MODE_LABELS",
+    "STYLE_CAPTIONS",
+    "STYLE_LABELS",
+    "SummaryError",
+    "build_prompt_template",
+    "summarize_markdown",
+)
+summarizer_backend = importlib.import_module("summarizer.deepseek")
+if not all(hasattr(summarizer_backend, name) for name in SUMMARIZER_SYMBOLS):
+    summarizer_backend = importlib.reload(summarizer_backend)
+
+DEFAULT_BASE_URL = summarizer_backend.DEFAULT_BASE_URL
+DEFAULT_MODEL = summarizer_backend.DEFAULT_MODEL
+MAX_SOURCE_CHARACTERS = summarizer_backend.MAX_SOURCE_CHARACTERS
+MODE_CAPTIONS = summarizer_backend.MODE_CAPTIONS
+MODE_LABELS = summarizer_backend.MODE_LABELS
+STYLE_CAPTIONS = summarizer_backend.STYLE_CAPTIONS
+STYLE_LABELS = summarizer_backend.STYLE_LABELS
+SummaryError = summarizer_backend.SummaryError
+build_prompt_template = summarizer_backend.build_prompt_template
+summarize_markdown = summarizer_backend.summarize_markdown
 
 
 SAMPLE = """# 一份等待摘要的长文
