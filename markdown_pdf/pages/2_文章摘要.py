@@ -16,6 +16,10 @@ from url_documents import UrlDocumentError, fetch_url_document
 SUMMARIZER_SYMBOLS = (
     "DEFAULT_BASE_URL",
     "DEFAULT_MODEL",
+    "LENGTH_CAPTIONS",
+    "LENGTH_LABELS",
+    "LENGTH_TARGETS",
+    "MAX_CUSTOM_INSTRUCTION_CHARACTERS",
     "MAX_SOURCE_CHARACTERS",
     "MODE_CAPTIONS",
     "MODE_LABELS",
@@ -31,6 +35,10 @@ if not all(hasattr(summarizer_backend, name) for name in SUMMARIZER_SYMBOLS):
 
 DEFAULT_BASE_URL = summarizer_backend.DEFAULT_BASE_URL
 DEFAULT_MODEL = summarizer_backend.DEFAULT_MODEL
+LENGTH_CAPTIONS = summarizer_backend.LENGTH_CAPTIONS
+LENGTH_LABELS = summarizer_backend.LENGTH_LABELS
+LENGTH_TARGETS = summarizer_backend.LENGTH_TARGETS
+MAX_CUSTOM_INSTRUCTION_CHARACTERS = summarizer_backend.MAX_CUSTOM_INSTRUCTION_CHARACTERS
 MAX_SOURCE_CHARACTERS = summarizer_backend.MAX_SOURCE_CHARACTERS
 MODE_CAPTIONS = summarizer_backend.MODE_CAPTIONS
 MODE_LABELS = summarizer_backend.MODE_LABELS
@@ -145,7 +153,7 @@ if "summary_output_name" not in st.session_state:
     st.session_state.summary_output_name = "summary"
 
 api_key = secret_value("DEEPSEEK_API_KEY")
-model = secret_value("DEEPSEEK_MODEL", DEFAULT_MODEL)
+configured_model = secret_value("DEEPSEEK_MODEL", DEFAULT_MODEL)
 base_url = secret_value("DEEPSEEK_BASE_URL", DEFAULT_BASE_URL)
 
 st.title("文章摘要")
@@ -266,11 +274,19 @@ mode_order = ["standard", "section"]
 mode_labels = [MODE_LABELS[mode] for mode in mode_order]
 style_order = ["direct", "beginner"]
 style_labels = [STYLE_LABELS[style] for style in style_order]
+length_order = ["normal", "detailed"]
+length_labels = [LENGTH_LABELS[length] for length in length_order]
 language_options = {
     "跟随原文": "source",
     "简体中文": "zh",
     "English": "en",
 }
+model_options = {
+    "DeepSeek V4 Flash": "deepseek-v4-flash",
+    "DeepSeek V4 Pro": "deepseek-v4-pro",
+}
+if configured_model not in model_options.values():
+    model_options[f"当前配置 · {configured_model}"] = configured_model
 
 editor_col, options_col = st.columns([1.45, 1], gap="large")
 with editor_col:
@@ -286,6 +302,17 @@ with editor_col:
     )
     if source_is_stale:
         st.warning("原文已经修改。当前结果仍是上一版；重新生成即可更新。")
+    custom_instructions = st.text_area(
+        "补充要求（可选）",
+        key="summary_custom_instructions",
+        height=112,
+        max_chars=MAX_CUSTOM_INSTRUCTION_CHARACTERS,
+        placeholder="例如：重点解释数据变化；保留所有行动建议；用更客观的语气。",
+        help=(
+            "补充要求会加入摘要 Prompt，用于指定关注重点、语气或展开方式；"
+            "不能覆盖忠实性、内容结构和输出格式规则。"
+        ),
+    )
 
 with options_col:
     selected_mode_label = st.radio(
@@ -304,20 +331,49 @@ with options_col:
         key="summary_style_choice",
     )
     selected_style = style_order[style_labels.index(selected_style_label)]
-    language_label = st.selectbox(
-        "输出语言",
-        list(language_options),
-        key="summary_language_label",
+    selected_length_label = st.radio(
+        "摘要篇幅",
+        length_labels,
+        index=0,
+        captions=[LENGTH_CAPTIONS[length] for length in length_order],
+        key="summary_length_choice",
     )
+    selected_length = length_order[length_labels.index(selected_length_label)]
+    chinese_target, english_target = LENGTH_TARGETS[
+        (selected_mode, selected_style, selected_length)
+    ]
+    st.caption(f"目标篇幅：中文约 {chinese_target}；英文约 {english_target}。")
+    configured_model_index = list(model_options.values()).index(configured_model)
+    language_col, model_col = st.columns(2, gap="medium")
+    with language_col:
+        language_label = st.selectbox(
+            "输出语言",
+            list(language_options),
+            key="summary_language_label",
+        )
+    with model_col:
+        model_label = st.selectbox(
+            "摘要模型",
+            list(model_options),
+            index=configured_model_index,
+            key="summary_model_label",
+        )
+    model = model_options[model_label]
+    st.caption("V4 Pro 的 API 单价高于 V4 Flash；默认选择遵循部署配置。")
     st.text_input("下载文件名", key="summary_output_name")
 
     with st.expander("查看提示词与隐私"):
-        st.caption("复制的是当前内容结构、讲述方式、语言和系统规则；正文位置使用占位符。")
+        st.caption(
+            "复制的是当前内容结构、讲述方式、篇幅、补充要求、语言和系统规则；"
+            "正文位置使用占位符。"
+        )
         clipboard_button(
             build_prompt_template(
                 mode=selected_mode,
                 language=language_options[language_label],
                 style=selected_style,
+                length=selected_length,
+                custom_instructions=custom_instructions,
             ),
             "复制当前提示词",
             key="summary-prompt-template",
@@ -334,8 +390,9 @@ with options_col:
         width="stretch",
         disabled=not api_key,
     )
+    st.caption("修改设置或补充要求后，点击重新生成才会应用。")
     st.caption(
-        f"{model} · 上限 {MAX_SOURCE_CHARACTERS // 10_000} 万字符 · PDF 500 页"
+        f"{model} · 原文上限 {MAX_SOURCE_CHARACTERS // 10_000} 万字符"
     )
 
 if generate_clicked:
@@ -351,6 +408,8 @@ if generate_clicked:
                     mode=selected_mode,
                     language=language_options[language_label],
                     style=selected_style,
+                    length=selected_length,
+                    custom_instructions=custom_instructions,
                     api_key=api_key,
                     model=model,
                     base_url=base_url,

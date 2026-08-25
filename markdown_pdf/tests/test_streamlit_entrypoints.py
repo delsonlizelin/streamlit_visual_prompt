@@ -76,6 +76,32 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertEqual(style_control.options, ["直接摘要", "零基础讲解"])
         style_control.set_value("零基础讲解").run()
         self.assertEqual(style_control.value, "零基础讲解")
+        length_control = next(radio for radio in app.radio if radio.label == "摘要篇幅")
+        self.assertEqual(length_control.options, ["标准篇幅（推荐）", "详细展开"])
+        length_control.set_value("详细展开").run()
+        self.assertEqual(length_control.value, "详细展开")
+        model_control = next(
+            selectbox for selectbox in app.selectbox if selectbox.label == "摘要模型"
+        )
+        self.assertEqual(
+            model_control.options,
+            ["DeepSeek V4 Flash", "DeepSeek V4 Pro"],
+        )
+        model_control.set_value("DeepSeek V4 Pro").run()
+        self.assertEqual(model_control.value, "DeepSeek V4 Pro")
+        self.assertEqual(list(app.exception), [])
+
+    def test_summary_page_accepts_optional_prompt_guidance(self) -> None:
+        app = AppTest.from_file(
+            APP_ROOT / "pages" / "2_文章摘要.py",
+            default_timeout=10,
+        ).run()
+        prompt_input = next(
+            area for area in app.text_area if area.label == "补充要求（可选）"
+        )
+        prompt_input.set_value("重点解释数据变化。保留全部行动建议。").run()
+
+        self.assertEqual(prompt_input.value, "重点解释数据变化。保留全部行动建议。")
         self.assertEqual(list(app.exception), [])
 
     def test_summary_page_keeps_all_source_methods_visible_in_one_control(self) -> None:

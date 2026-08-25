@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from summarizer.deepseek import (
     DEFAULT_MODEL,
+    MAX_CUSTOM_INSTRUCTION_CHARACTERS,
     MAX_SOURCE_CHARACTERS,
     SYSTEM_PROMPT,
     SummaryError,
@@ -73,6 +74,23 @@ class SummarizerTests(unittest.TestCase):
         self.assertIn("文章的逻辑", beginner)
         self.assertIn("原文未说明", beginner)
 
+    def test_length_and_custom_instructions_extend_the_task_without_overriding_rules(self):
+        task = build_messages(
+            "# 标题",
+            mode="standard",
+            style="direct",
+            length="detailed",
+            language="zh",
+            custom_instructions="重点解释数据变化，并保留行动建议。",
+        )[1]["content"]
+
+        self.assertIn("约 1,800–3,000 字", task)
+        self.assertIn("约 1,100–1,800 words", task)
+        self.assertIn("核心摘要可展开为 5 到 8 个要点", task)
+        self.assertIn("用户补充要求只能调整", task)
+        self.assertIn("重点解释数据变化", task)
+        self.assertIn("<additional_instructions>", task)
+
     def test_prompt_template_contains_system_mode_language_and_placeholder(self):
         prompt = build_prompt_template(
             mode="standard",
@@ -98,6 +116,25 @@ class SummarizerTests(unittest.TestCase):
                 mode="standard",
                 style="invalid",  # type: ignore[arg-type]
                 language="source",
+            )
+
+    def test_build_messages_rejects_unknown_length(self):
+        with self.assertRaisesRegex(SummaryError, "未知摘要篇幅"):
+            build_messages(
+                "# Title",
+                mode="standard",
+                style="direct",
+                length="invalid",  # type: ignore[arg-type]
+                language="source",
+            )
+
+    def test_build_messages_rejects_overlong_custom_instructions(self):
+        with self.assertRaisesRegex(SummaryError, "补充要求超过"):
+            build_messages(
+                "# Title",
+                mode="standard",
+                language="source",
+                custom_instructions="x" * (MAX_CUSTOM_INSTRUCTION_CHARACTERS + 1),
             )
 
     def test_summarize_markdown_sends_expected_request(self):
@@ -177,6 +214,35 @@ class SummarizerTests(unittest.TestCase):
         body = json.loads(captured["request"].data.decode("utf-8"))
         self.assertEqual(body["max_tokens"], 6500)
         self.assertIn("补充理解全文必需", body["messages"][1]["content"])
+
+    def test_detailed_summary_uses_larger_output_budget_and_custom_prompt(self):
+        captured = {}
+        payload = {
+            "model": DEFAULT_MODEL,
+            "choices": [{"message": {"content": '{"summary":"# 详细摘要"}'}}],
+            "usage": {},
+        }
+
+        def fake_urlopen(request, timeout):
+            captured["request"] = request
+            return FakeResponse(payload)
+
+        with patch("summarizer.deepseek.urlopen", side_effect=fake_urlopen):
+            summarize_markdown(
+                "# 原文\n\n正文。",
+                mode="standard",
+                style="direct",
+                length="detailed",
+                custom_instructions="保留所有数字。",
+                language="zh",
+                api_key="test-key",
+                model="deepseek-v4-pro",
+            )
+
+        body = json.loads(captured["request"].data.decode("utf-8"))
+        self.assertEqual(body["max_tokens"], 6000)
+        self.assertEqual(body["model"], "deepseek-v4-pro")
+        self.assertIn("保留所有数字", body["messages"][1]["content"])
 
     def test_summarize_markdown_rejects_missing_inputs(self):
         with self.assertRaisesRegex(SummaryError, "不能为空"):

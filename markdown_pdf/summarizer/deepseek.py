@@ -10,11 +10,13 @@ from urllib.request import Request, urlopen
 
 SummaryMode = Literal["standard", "section"]
 SummaryStyle = Literal["direct", "beginner"]
+SummaryLength = Literal["normal", "detailed"]
 SummaryLanguage = Literal["source", "zh", "en"]
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-v4-flash"
 MAX_SOURCE_CHARACTERS = 300_000
+MAX_CUSTOM_INSTRUCTION_CHARACTERS = 4_000
 
 MODE_INSTRUCTIONS: dict[SummaryMode, str] = {
     "standard": (
@@ -74,6 +76,56 @@ STYLE_CAPTIONS: dict[SummaryStyle, str] = {
     "beginner": "补背景、释术语、展开全文逻辑 · 适合第一次学习这个主题",
 }
 
+LENGTH_INSTRUCTIONS: dict[SummaryLength, str] = {
+    "normal": (
+        "采用“标准篇幅”。以所选内容结构规定的要点或章节数量为准，保留主要结论和支撑理解的必要依据；"
+        "篇幅随原文有效信息量调整，不重复凑字数。"
+    ),
+    "detailed": (
+        "采用“详细展开”篇幅，通常比同一篇文章的标准版更长，但信息不足时不要重复凑字数。"
+        "这条指令优先于前述内容结构中的要点数量限制：核心摘要可展开为 5 到 8 个要点；按章节梳理应"
+        "保留所有有效章节，每节提炼 2 到 4 项重要信息。除结论外，还要尽量保留支撑结论的关键论据、"
+        "数据、例子、因果过程、不同立场、限制条件和不确定性，并把容易跳过的推理步骤写清楚。"
+    ),
+}
+
+LENGTH_LABELS: dict[SummaryLength, str] = {
+    "normal": "标准篇幅（推荐）",
+    "detailed": "详细展开",
+}
+
+LENGTH_CAPTIONS: dict[SummaryLength, str] = {
+    "normal": "保留主要结论与必要依据 · 篇幅随信息量调整",
+    "detailed": "展开更多论据、数据、例子、限制和推理过程",
+}
+
+LENGTH_TARGETS: dict[
+    tuple[SummaryMode, SummaryStyle, SummaryLength], tuple[str, str]
+] = {
+    ("standard", "direct", "normal"): ("800–1,400 字", "500–900 words"),
+    ("section", "direct", "normal"): ("1,500–2,600 字", "900–1,600 words"),
+    ("standard", "beginner", "normal"): ("1,800–3,000 字", "1,100–1,800 words"),
+    ("section", "beginner", "normal"): ("2,600–4,200 字", "1,600–2,600 words"),
+    ("standard", "direct", "detailed"): ("1,800–3,000 字", "1,100–1,800 words"),
+    ("section", "direct", "detailed"): ("3,000–5,000 字", "1,800–3,000 words"),
+    ("standard", "beginner", "detailed"): ("3,200–5,200 字", "2,000–3,200 words"),
+    ("section", "beginner", "detailed"): ("4,800–8,000 字", "3,000–5,000 words"),
+}
+
+# JSON Output can be truncated without a sufficiently generous API ceiling. These
+# values are an internal transport safeguard; user-facing length is controlled by
+# the Chinese-character / English-word targets above.
+_MAX_OUTPUT_TOKENS: dict[tuple[SummaryMode, SummaryStyle, SummaryLength], int] = {
+    ("standard", "direct", "normal"): 1_800,
+    ("section", "direct", "normal"): 4_500,
+    ("standard", "beginner", "normal"): 4_200,
+    ("section", "beginner", "normal"): 6_500,
+    ("standard", "direct", "detailed"): 6_000,
+    ("section", "direct", "detailed"): 10_000,
+    ("standard", "beginner", "detailed"): 10_000,
+    ("section", "beginner", "detailed"): 16_000,
+}
+
 LANGUAGE_INSTRUCTIONS: dict[SummaryLanguage, str] = {
     "source": "摘要语言跟随原文的主要语言。",
     "zh": "使用简体中文输出摘要。",
@@ -125,20 +177,45 @@ def build_messages(
     mode: SummaryMode,
     language: SummaryLanguage,
     style: SummaryStyle = "direct",
+    length: SummaryLength = "normal",
+    custom_instructions: str = "",
 ) -> list[dict[str, str]]:
     if mode not in MODE_INSTRUCTIONS:
         raise SummaryError(f"未知摘要模式：{mode}")
     if style not in STYLE_INSTRUCTIONS:
         raise SummaryError(f"未知讲述方式：{style}")
+    if length not in LENGTH_INSTRUCTIONS:
+        raise SummaryError(f"未知摘要篇幅：{length}")
     if language not in LANGUAGE_INSTRUCTIONS:
         raise SummaryError(f"未知摘要语言：{language}")
+    custom = custom_instructions.strip()
+    if len(custom) > MAX_CUSTOM_INSTRUCTION_CHARACTERS:
+        raise SummaryError(
+            f"补充要求超过 {MAX_CUSTOM_INSTRUCTION_CHARACTERS:,} 个字符，请精简后重试。"
+        )
+    custom_block = ""
+    if custom:
+        custom_block = (
+            "\n用户补充要求只能调整摘要的关注重点、语气和展开方式；如果它与忠实性、所选结构、"
+            "Markdown 或 JSON 输出规则冲突，以前述规则为准。\n"
+            "<additional_instructions>\n"
+            f"{custom}\n"
+            "</additional_instructions>\n"
+        )
+    chinese_target, english_target = LENGTH_TARGETS[(mode, style, length)]
+    target_instruction = (
+        f"篇幅目标：若输出中文，约 {chinese_target}；若输出英文，约 {english_target}；"
+        "其他语言采用相近的信息密度。原文很短或有效信息不足时可以少于下限，不得重复或虚构内容凑字数。"
+    )
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
         {
             "role": "user",
             "content": (
                 f"{MODE_INSTRUCTIONS[mode]}\n{STYLE_INSTRUCTIONS[style]}\n"
-                f"{LANGUAGE_INSTRUCTIONS[language]}\n\n"
+                f"{LENGTH_INSTRUCTIONS[length]}\n{target_instruction}\n"
+                f"{LANGUAGE_INSTRUCTIONS[language]}\n"
+                f"{custom_block}\n"
                 "请总结下面的 Markdown 文档：\n\n"
                 "<document>\n"
                 f"{markdown_source}\n"
@@ -153,6 +230,8 @@ def build_prompt_template(
     mode: SummaryMode,
     language: SummaryLanguage,
     style: SummaryStyle = "direct",
+    length: SummaryLength = "normal",
+    custom_instructions: str = "",
 ) -> str:
     """Return the exact prompt structure with a safe placeholder for reuse."""
     messages = build_messages(
@@ -160,6 +239,8 @@ def build_prompt_template(
         mode=mode,
         language=language,
         style=style,
+        length=length,
+        custom_instructions=custom_instructions,
     )
     return (
         "【系统提示词】\n"
@@ -202,6 +283,8 @@ def summarize_markdown(
     mode: SummaryMode,
     language: SummaryLanguage,
     style: SummaryStyle = "direct",
+    length: SummaryLength = "normal",
+    custom_instructions: str = "",
     api_key: str,
     model: str = DEFAULT_MODEL,
     base_url: str = DEFAULT_BASE_URL,
@@ -222,15 +305,12 @@ def summarize_markdown(
             mode=mode,
             language=language,
             style=style,
+            length=length,
+            custom_instructions=custom_instructions,
         ),
         "thinking": {"type": "disabled"},
         "temperature": 0.2,
-        "max_tokens": {
-            ("standard", "direct"): 1800,
-            ("section", "direct"): 4500,
-            ("standard", "beginner"): 4200,
-            ("section", "beginner"): 6500,
-        }[(mode, style)],
+        "max_tokens": _MAX_OUTPUT_TOKENS[(mode, style, length)],
         "response_format": {"type": "json_object"},
         "stream": False,
     }
