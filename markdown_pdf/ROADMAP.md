@@ -90,6 +90,13 @@
 - 补充要求不能覆盖忠实性、内容结构、Markdown 与 JSON 输出规则。
 - 增加 DeepSeek V4 Flash 与 V4 Pro 模型选择，继续使用官方 Chat Completions 与 JSON Output。
 
+## V1.7：API 性能与选项精简（已完成）
+
+- 把文章正文放在可变摘要设置之前，提高同一文章重新生成时的 DeepSeek 前缀缓存机会；
+- 保持非思考、非流式的单次 JSON Output 请求，不增加正常路径的 API 调用；
+- 只对 HTTP 429、500、503 瞬时错误进行一次短等待重试，并识别输出被截断的状态；
+- 主流程只保留内容结构、讲述方式和详细程度，其他设置统一渐进展开。
+
 ## 密钥与隐私
 
 - DeepSeek Key 只从 Streamlit Secrets 读取；

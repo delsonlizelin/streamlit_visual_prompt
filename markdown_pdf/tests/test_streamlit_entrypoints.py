@@ -59,7 +59,7 @@ class StreamlitEntrypointTests(unittest.TestCase):
 
     def test_summary_page_exposes_current_prompt_copy_button(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
-        self.assertIn('"复制当前提示词"', source)
+        self.assertIn('"复制完整 Prompt"', source)
         self.assertIn("build_prompt_template", source)
 
     def test_summary_page_separates_structure_from_explanation_style(self) -> None:
@@ -67,16 +67,28 @@ class StreamlitEntrypointTests(unittest.TestCase):
             APP_ROOT / "pages" / "2_文章摘要.py",
             default_timeout=10,
         ).run()
-        mode_control = next(radio for radio in app.radio if radio.label == "内容结构")
+        mode_control = next(
+            control
+            for control in app.get("button_group")
+            if control.label == "内容结构"
+        )
         self.assertEqual(
             mode_control.options,
             ["核心摘要（推荐）", "按章节梳理"],
         )
-        style_control = next(radio for radio in app.radio if radio.label == "讲述方式")
+        style_control = next(
+            control
+            for control in app.get("button_group")
+            if control.label == "讲述方式"
+        )
         self.assertEqual(style_control.options, ["直接摘要", "零基础讲解"])
         style_control.set_value("零基础讲解").run()
         self.assertEqual(style_control.value, "零基础讲解")
-        length_control = next(radio for radio in app.radio if radio.label == "摘要篇幅")
+        length_control = next(
+            control
+            for control in app.get("button_group")
+            if control.label == "详细程度"
+        )
         self.assertEqual(length_control.options, ["标准篇幅（推荐）", "详细展开"])
         length_control.set_value("详细展开").run()
         self.assertEqual(length_control.value, "详细展开")

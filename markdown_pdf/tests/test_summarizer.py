@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import unittest
+from io import BytesIO
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 from summarizer.deepseek import (
     DEFAULT_MODEL,
@@ -53,6 +55,29 @@ class SummarizerTests(unittest.TestCase):
         self.assertIn("每节只列 1 到 2 条", messages[1]["content"])
         self.assertIn("使用简体中文", messages[1]["content"])
         self.assertIn("<document>", messages[1]["content"])
+        self.assertLess(
+            messages[1]["content"].index("</document>"),
+            messages[1]["content"].index("<summary_task>"),
+        )
+
+    def test_document_is_the_stable_prefix_when_summary_options_change(self):
+        direct = build_messages(
+            "# 同一篇原文\n\n正文。",
+            mode="standard",
+            style="direct",
+            language="zh",
+        )[1]["content"]
+        beginner = build_messages(
+            "# 同一篇原文\n\n正文。",
+            mode="section",
+            style="beginner",
+            language="en",
+        )[1]["content"]
+
+        direct_prefix = direct.split("<summary_task>", 1)[0]
+        beginner_prefix = beginner.split("<summary_task>", 1)[0]
+        self.assertEqual(direct_prefix, beginner_prefix)
+        self.assertIn("# 同一篇原文", direct_prefix)
 
     def test_structure_and_style_have_distinct_output_contracts(self):
         standard = build_messages("# 标题", mode="standard", language="zh")[1]["content"]
@@ -272,6 +297,58 @@ class SummarizerTests(unittest.TestCase):
             "summarizer.deepseek.urlopen", return_value=FakeResponse(payload)
         ):
             with self.assertRaisesRegex(SummaryError, "有效的摘要 JSON"):
+                summarize_markdown(
+                    "# Title",
+                    mode="standard",
+                    language="source",
+                    api_key="test-key",
+                )
+
+    def test_transient_api_error_retries_once(self):
+        transient = HTTPError(
+            "https://api.deepseek.com/chat/completions",
+            503,
+            "overloaded",
+            {"Retry-After": "0"},
+            BytesIO(b'{"error":{"message":"busy"}}'),
+        )
+        payload = {
+            "model": DEFAULT_MODEL,
+            "choices": [{"message": {"content": '{"summary":"# 摘要"}'}}],
+            "usage": {},
+        }
+        with (
+            patch(
+                "summarizer.deepseek.urlopen",
+                side_effect=[transient, FakeResponse(payload)],
+            ) as mocked_urlopen,
+            patch("summarizer.deepseek.time.sleep") as mocked_sleep,
+        ):
+            result = summarize_markdown(
+                "# 原文",
+                mode="standard",
+                language="zh",
+                api_key="test-key",
+            )
+
+        self.assertEqual(result.summary, "# 摘要")
+        self.assertEqual(mocked_urlopen.call_count, 2)
+        mocked_sleep.assert_called_once_with(0.0)
+
+    def test_length_finish_reason_has_actionable_error(self):
+        payload = {
+            "choices": [
+                {
+                    "finish_reason": "length",
+                    "message": {"content": '{"summary":"# 未完成"}'},
+                }
+            ],
+            "usage": {},
+        }
+        with patch(
+            "summarizer.deepseek.urlopen", return_value=FakeResponse(payload)
+        ):
+            with self.assertRaisesRegex(SummaryError, "达到模型输出上限"):
                 summarize_markdown(
                     "# Title",
                     mode="standard",

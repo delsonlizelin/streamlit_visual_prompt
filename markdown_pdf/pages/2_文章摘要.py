@@ -16,14 +16,11 @@ from url_documents import UrlDocumentError, fetch_url_document
 SUMMARIZER_SYMBOLS = (
     "DEFAULT_BASE_URL",
     "DEFAULT_MODEL",
-    "LENGTH_CAPTIONS",
     "LENGTH_LABELS",
     "LENGTH_TARGETS",
     "MAX_CUSTOM_INSTRUCTION_CHARACTERS",
     "MAX_SOURCE_CHARACTERS",
-    "MODE_CAPTIONS",
     "MODE_LABELS",
-    "STYLE_CAPTIONS",
     "STYLE_LABELS",
     "SummaryError",
     "build_prompt_template",
@@ -35,14 +32,11 @@ if not all(hasattr(summarizer_backend, name) for name in SUMMARIZER_SYMBOLS):
 
 DEFAULT_BASE_URL = summarizer_backend.DEFAULT_BASE_URL
 DEFAULT_MODEL = summarizer_backend.DEFAULT_MODEL
-LENGTH_CAPTIONS = summarizer_backend.LENGTH_CAPTIONS
 LENGTH_LABELS = summarizer_backend.LENGTH_LABELS
 LENGTH_TARGETS = summarizer_backend.LENGTH_TARGETS
 MAX_CUSTOM_INSTRUCTION_CHARACTERS = summarizer_backend.MAX_CUSTOM_INSTRUCTION_CHARACTERS
 MAX_SOURCE_CHARACTERS = summarizer_backend.MAX_SOURCE_CHARACTERS
-MODE_CAPTIONS = summarizer_backend.MODE_CAPTIONS
 MODE_LABELS = summarizer_backend.MODE_LABELS
-STYLE_CAPTIONS = summarizer_backend.STYLE_CAPTIONS
 STYLE_LABELS = summarizer_backend.STYLE_LABELS
 SummaryError = summarizer_backend.SummaryError
 build_prompt_template = summarizer_backend.build_prompt_template
@@ -302,69 +296,76 @@ with editor_col:
     )
     if source_is_stale:
         st.warning("原文已经修改。当前结果仍是上一版；重新生成即可更新。")
-    custom_instructions = st.text_area(
-        "补充要求（可选）",
-        key="summary_custom_instructions",
-        height=112,
-        max_chars=MAX_CUSTOM_INSTRUCTION_CHARACTERS,
-        placeholder="例如：重点解释数据变化；保留所有行动建议；用更客观的语气。",
-        help=(
-            "补充要求会加入摘要 Prompt，用于指定关注重点、语气或展开方式；"
-            "不能覆盖忠实性、内容结构和输出格式规则。"
-        ),
-    )
 
 with options_col:
-    selected_mode_label = st.radio(
+    st.subheader("摘要设置")
+    selected_mode_label = st.segmented_control(
         "内容结构",
         mode_labels,
-        index=0,
-        captions=[MODE_CAPTIONS[mode] for mode in mode_order],
+        default=mode_labels[0],
         key="summary_structure_choice",
+        help="核心摘要会跨章节重组信息；按章节梳理会沿原文结构提炼。",
+        width="stretch",
     )
     selected_mode = mode_order[mode_labels.index(selected_mode_label)]
-    selected_style_label = st.radio(
+    selected_style_label = st.segmented_control(
         "讲述方式",
         style_labels,
-        index=0,
-        captions=[STYLE_CAPTIONS[style] for style in style_order],
+        default=style_labels[0],
         key="summary_style_choice",
+        help="直接摘要保留术语和信息密度；零基础讲解会补背景、解释术语并展开逻辑。",
+        width="stretch",
     )
     selected_style = style_order[style_labels.index(selected_style_label)]
-    selected_length_label = st.radio(
-        "摘要篇幅",
+    selected_length_label = st.segmented_control(
+        "详细程度",
         length_labels,
-        index=0,
-        captions=[LENGTH_CAPTIONS[length] for length in length_order],
+        default=length_labels[0],
         key="summary_length_choice",
+        help="详细展开会保留更多论据、数据、例子、限制和推理过程。",
+        width="stretch",
     )
     selected_length = length_order[length_labels.index(selected_length_label)]
     chinese_target, english_target = LENGTH_TARGETS[
         (selected_mode, selected_style, selected_length)
     ]
-    st.caption(f"目标篇幅：中文约 {chinese_target}；英文约 {english_target}。")
+    st.caption(
+        f"当前方案：{selected_mode_label.replace('（推荐）', '')} · "
+        f"{selected_style_label} · {selected_length_label.replace('（推荐）', '')}。"
+        f"中文约 {chinese_target}；英文约 {english_target}。"
+    )
     configured_model_index = list(model_options.values()).index(configured_model)
-    language_col, model_col = st.columns(2, gap="medium")
-    with language_col:
-        language_label = st.selectbox(
-            "输出语言",
-            list(language_options),
-            key="summary_language_label",
+    with st.expander("更多设置 · 语言、模型与补充要求"):
+        custom_instructions = st.text_area(
+            "补充要求（可选）",
+            key="summary_custom_instructions",
+            height=112,
+            max_chars=MAX_CUSTOM_INSTRUCTION_CHARACTERS,
+            placeholder="例如：重点解释数据变化；保留所有行动建议；用更客观的语气。",
+            help=(
+                "补充要求会加入摘要 Prompt，用于指定关注重点、语气或展开方式；"
+                "不能覆盖忠实性、内容结构和输出格式规则。"
+            ),
         )
-    with model_col:
-        model_label = st.selectbox(
-            "摘要模型",
-            list(model_options),
-            index=configured_model_index,
-            key="summary_model_label",
-        )
-    model = model_options[model_label]
-    st.caption("V4 Pro 的 API 单价高于 V4 Flash；默认选择遵循部署配置。")
-    st.text_input("下载文件名", key="summary_output_name")
-
-    with st.expander("查看提示词与隐私"):
+        language_col, model_col = st.columns(2, gap="medium")
+        with language_col:
+            language_label = st.selectbox(
+                "输出语言",
+                list(language_options),
+                key="summary_language_label",
+            )
+        with model_col:
+            model_label = st.selectbox(
+                "摘要模型",
+                list(model_options),
+                index=configured_model_index,
+                key="summary_model_label",
+            )
+        model = model_options[model_label]
+        st.caption("V4 Pro 的 API 单价高于 V4 Flash；默认选择遵循部署配置。")
+        st.text_input("下载文件名", key="summary_output_name")
         st.caption(
-            "复制的是当前内容结构、讲述方式、篇幅、补充要求、语言和系统规则；"
+            "复制的是当前结构、讲述方式、详细程度、补充要求、语言和系统规则；"
             "正文位置使用占位符。"
         )
         clipboard_button(
@@ -375,7 +376,7 @@ with options_col:
                 length=selected_length,
                 custom_instructions=custom_instructions,
             ),
-            "复制当前提示词",
+            "复制完整 Prompt",
             key="summary-prompt-template",
         )
         st.markdown(
@@ -390,9 +391,9 @@ with options_col:
         width="stretch",
         disabled=not api_key,
     )
-    st.caption("修改设置或补充要求后，点击重新生成才会应用。")
     st.caption(
-        f"{model} · 原文上限 {MAX_SOURCE_CHARACTERS // 10_000} 万字符"
+        f"{language_label} · {model_label} · 原文上限 "
+        f"{MAX_SOURCE_CHARACTERS // 10_000} 万字符"
     )
 
 if generate_clicked:
