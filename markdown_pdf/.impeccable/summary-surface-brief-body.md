@@ -24,7 +24,7 @@
 | Page shell | Cool gray field, generous centered workspace, hairline top navigation | Semantic Streamlit HTML + CSS |
 | Source/settings region | Compact numbered workflow, flat white fields, 10–12px corner language, no card stack | Streamlit controls + CSS |
 | Primary action | Full-width cinnabar button, no gradient or glow | Streamlit button + CSS |
-| Result proof | Largest region on wide screens; natural stack on mobile | Streamlit image + deterministic PNG renderer |
+| Result proof | Largest region on wide screens; freshness, quality, and local-edit controls precede the potentially tall image; natural stack on mobile | Streamlit controls + deterministic PNG renderer |
 | Summary header | Title, optional source/author metadata, no fake snapshot or logo | HTML template |
 | Summary sections | One white reading sheet with hairline separation, no nested page inset, and a compact number rail so body copy keeps roughly 80% of the mobile canvas | Structured data + HTML/CSS |
 | Emphasis | 0–2 short spans per item, cinnabar plus weight; routine bullets remain neutral and color is never the sole carrier | Escaped HTML spans |

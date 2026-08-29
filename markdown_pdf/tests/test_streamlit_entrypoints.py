@@ -61,8 +61,9 @@ class StreamlitEntrypointTests(unittest.TestCase):
 
     def test_summary_page_exposes_current_prompt_copy_button(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
-        self.assertIn('"复制完整 Prompt"', source)
+        self.assertIn('"复制当前完整 Prompt"', source)
         self.assertIn("build_prompt_template", source)
+        self.assertIn("build_request_fingerprint", source)
 
     @unittest.skipIf(
         STREAMLIT_VERSION < (1, 60),
@@ -148,8 +149,16 @@ class StreamlitEntrypointTests(unittest.TestCase):
     def test_summary_page_exposes_local_editor_and_quality_check(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
         self.assertIn('"应用修改并重新排版"', source)
+        self.assertIn('"恢复模型原稿"', source)
         self.assertIn("supplement_numeric_highlights=False", source)
         self.assertIn("lint_summary_document", source)
+        self.assertLess(source.index('with st.expander("编辑摘要文字'), source.index("st.image(artifact.png"))
+
+    def test_summary_page_describes_literal_number_matching_honestly(self) -> None:
+        source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
+        self.assertIn("数字字面匹配", source)
+        self.assertIn("不判断数字的上下文、主体或因果关系", source)
+        self.assertIn("原文已修改，本次只检查摘要结构", source)
 
     def test_summary_choices_precede_the_primary_action(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")

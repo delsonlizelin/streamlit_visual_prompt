@@ -51,6 +51,34 @@ class SummaryQualityTests(unittest.TestCase):
         report = lint_summary_document(document, "参与者共有 1,200 人。")
         self.assertNotIn("unsupported-number", {issue.code for issue in report.issues})
 
+    def test_two_question_headings_are_reported(self):
+        document = SummaryDocument(
+            title="测试主题",
+            byline=None,
+            lead=None,
+            sections=(
+                SummarySection("发生了什么？", (SummaryItem("第一项具体判断。"),)),
+                SummarySection("为什么重要？", (SummaryItem("第二项具体判断。"),)),
+            ),
+        )
+        report = lint_summary_document(document)
+        self.assertIn("question-heading-density", {issue.code for issue in report.issues})
+
+    def test_highlight_density_warning_uses_actual_highlights(self):
+        document = SummaryDocument(
+            title="测试主题",
+            byline=None,
+            lead=None,
+            sections=(
+                SummarySection(
+                    "判断",
+                    (SummaryItem("关键结论改变判断。", ("关键结论", "改变判断")),),
+                ),
+            ),
+        )
+        report = lint_summary_document(document)
+        self.assertIn("highlight-density", {issue.code for issue in report.issues})
+
 
 if __name__ == "__main__":
     unittest.main()

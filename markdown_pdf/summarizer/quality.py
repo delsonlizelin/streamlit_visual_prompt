@@ -82,7 +82,7 @@ def lint_summary_document(
     question_headings = sum(
         section.heading.rstrip().endswith(("?", "？")) for section in document.sections
     )
-    if len(document.sections) >= 3 and question_headings > len(document.sections) / 2:
+    if len(document.sections) >= 2 and question_headings > len(document.sections) / 2:
         issues.append(
             SummaryQualityIssue(
                 severity="warning",
@@ -92,6 +92,15 @@ def lint_summary_document(
         )
 
     for section_index, section in enumerate(document.sections, start=1):
+        if len(section.items) > 16:
+            issues.append(
+                SummaryQualityIssue(
+                    severity="warning",
+                    code="large-section",
+                    message=f"第 {section_index} 节包含 {len(section.items)} 条，长图阅读可能过密。",
+                    section=section_index,
+                )
+            )
         for item_index, item in enumerate(section.items, start=1):
             all_items.append((section_index, item_index, item.text))
             body_characters += len(item.text)
@@ -118,6 +127,15 @@ def lint_summary_document(
                         item=item_index,
                     )
                 )
+
+    if len(all_items) > 80:
+        issues.append(
+            SummaryQualityIssue(
+                severity="warning",
+                code="large-document",
+                message=f"摘要共 {len(all_items)} 条，单张长图可能过长，建议缩短原文或降低详细程度。",
+            )
+        )
 
     for index, (section_index, item_index, text) in enumerate(all_items):
         left = _similarity_text(text)

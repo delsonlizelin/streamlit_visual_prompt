@@ -32,6 +32,7 @@ SUMMARIZER_SYMBOLS = (
     "SummaryError",
     "SummaryResult",
     "build_prompt_template",
+    "build_request_fingerprint",
     "parse_summary_document",
     "summarize_markdown",
 )
@@ -51,6 +52,7 @@ SummaryDocument = summarizer_backend.SummaryDocument
 SummaryError = summarizer_backend.SummaryError
 SummaryResult = summarizer_backend.SummaryResult
 build_prompt_template = summarizer_backend.build_prompt_template
+build_request_fingerprint = summarizer_backend.build_request_fingerprint
 parse_summary_document = summarizer_backend.parse_summary_document
 summarize_markdown = summarizer_backend.summarize_markdown
 
@@ -111,6 +113,8 @@ def clear_generated_content() -> None:
     st.session_state.pop("summary_export", None)
     st.session_state.pop("summary_export_error", None)
     st.session_state.pop("summary_source_digest", None)
+    st.session_state.pop("summary_request_fingerprint", None)
+    st.session_state.pop("summary_model_original_json", None)
     st.session_state.pop("summary_editor_json", None)
     st.session_state.pop("summary_editor_pending_json", None)
     st.session_state.pop("summary_editor_seed_digest", None)
@@ -121,6 +125,33 @@ def use_source(*, text: str, output_name: str, meta: dict) -> None:
     st.session_state.summary_output_name = output_name
     st.session_state.summary_input_meta = meta
     clear_generated_content()
+
+
+def apply_local_summary_document(document: SummaryDocument, previous_result: SummaryResult) -> None:
+    """Store an edited document and render it without another model request."""
+    edited_result = SummaryResult(
+        document=document,
+        model=previous_result.model,
+        prompt_tokens=previous_result.prompt_tokens,
+        completion_tokens=previous_result.completion_tokens,
+        milliseconds=previous_result.milliseconds,
+    )
+    edited_digest = hashlib.sha256(document.to_json().encode("utf-8")).hexdigest()
+    st.session_state.summary_result = edited_result
+    st.session_state.summary_editor_seed_digest = edited_digest
+    st.session_state.summary_editor_pending_json = json.dumps(
+        document.to_dict(),
+        ensure_ascii=False,
+        indent=2,
+    )
+    st.session_state.pop("summary_export", None)
+    st.session_state.pop("summary_export_error", None)
+    artifact = build_summary_long_image(document, "mobile")
+    st.session_state.summary_export = {
+        "digest": edited_digest,
+        "mode": "mobile",
+        "artifact": artifact,
+    }
 
 
 def render_source_controls() -> None:
@@ -311,10 +342,10 @@ with workspace_col:
         help="上传文件或读取网页后，正文会出现在这里；你可以修改后再生成。",
     )
     current_source_digest = hashlib.sha256(markdown_source.encode("utf-8")).hexdigest()
-    source_is_stale = bool(
+    source_has_changed = bool(
         result and st.session_state.get("summary_source_digest") != current_source_digest
     )
-    if source_is_stale:
+    if source_has_changed:
         st.warning("原文已经修改。当前结果仍是上一版；重新生成即可更新。")
 
 with workspace_col:
@@ -397,18 +428,19 @@ with workspace_col:
         st.caption("V4 Pro 的 API 单价高于 V4 Flash；默认选择遵循部署配置。")
         st.text_input("下载文件名", key="summary_output_name")
         st.caption(
-            "复制的是当前结构、讲述方式、详细程度、补充要求、语言和系统规则；"
-            "正文位置使用占位符。"
+            "复制的是当前原文、结构、讲述方式、详细程度、补充要求、语言和系统规则；"
+            "原文中的换行、引号与反斜杠会自动转义为有效 JSON。"
         )
         clipboard_button(
             build_prompt_template(
+                markdown_source,
                 mode=selected_mode,
                 language=language_options[language_label],
                 style=selected_style,
                 length=selected_length,
                 custom_instructions=custom_instructions,
             ),
-            "复制完整 Prompt",
+            "复制当前完整 Prompt",
             key="summary-prompt-template",
         )
         st.markdown(
@@ -419,6 +451,22 @@ with workspace_col:
         f"{language_label} · {model_label} · 原文上限 "
         f"{MAX_SOURCE_CHARACTERS // 10_000} 万字符"
     )
+    current_request_fingerprint = build_request_fingerprint(
+        markdown_source,
+        mode=selected_mode,
+        language=language_options[language_label],
+        style=selected_style,
+        length=selected_length,
+        custom_instructions=custom_instructions,
+        model=model,
+    )
+    request_is_stale = bool(
+        result
+        and st.session_state.get("summary_request_fingerprint")
+        != current_request_fingerprint
+    )
+    if request_is_stale and not source_has_changed:
+        st.warning("当前结果使用上一版生成设置；重新生成后才会应用现有方案。")
 
 if generate_clicked:
     if not markdown_source.strip():
@@ -444,6 +492,12 @@ if generate_clicked:
                 ).hexdigest()
                 st.session_state.summary_result = generated_result
                 st.session_state.summary_source_digest = current_source_digest
+                st.session_state.summary_request_fingerprint = current_request_fingerprint
+                st.session_state.summary_model_original_json = json.dumps(
+                    generated_result.document.to_dict(),
+                    ensure_ascii=False,
+                    indent=2,
+                )
                 st.session_state.pop("summary_export", None)
                 st.session_state.pop("summary_export_error", None)
                 try:
@@ -494,25 +548,101 @@ with proof_col:
         export = st.session_state.get("summary_export")
         valid_export = bool(export and export.get("digest") == summary_digest)
 
-        if source_is_stale:
+        if source_has_changed:
             st.info("原文已经修改；这里仍是上一版长图。重新生成即可更新。")
+        elif request_is_stale:
+            st.info("当前结果使用上一版生成设置；重新生成后才会应用现有方案。")
         elif valid_export:
             st.success("内容与版式已经完成，可以保存或分享。", icon=":material/check_circle:")
 
         quality_report = lint_summary_document(
             result.document,
-            None if source_is_stale else markdown_source,
+            None if source_has_changed else markdown_source,
         )
+        checked_scope = "结构、重复、复合判断与高亮密度"
+        if not source_has_changed:
+            checked_scope += "，以及数字字面匹配"
         if quality_report.passed:
             st.caption(
-                f"自动检查：已核对 {quality_report.checked_items} 条摘要的结构、重复、"
-                "复合判断、数字来源与高亮密度，未发现明显问题。"
+                f"自动检查：已核对 {quality_report.checked_items} 条摘要的{checked_scope}，"
+                "未发现明显问题。"
             )
         else:
             st.warning(f"自动检查发现 {len(quality_report.issues)} 项需要人工核对。")
             with st.expander("查看自动检查结果"):
                 for issue in quality_report.issues:
                     st.markdown(f"- {issue.message}")
+                if not source_has_changed:
+                    st.caption(
+                        "数字字面匹配只检查摘要数字能否在原文找到相同写法（忽略空格、逗号和"
+                        "全角百分号），不判断数字的上下文、主体或因果关系。"
+                    )
+        if source_has_changed:
+            st.caption("原文已修改，本次只检查摘要结构；数字字面匹配未运行。")
+
+        pending_editor_json = st.session_state.pop("summary_editor_pending_json", None)
+        if pending_editor_json is not None:
+            st.session_state.summary_editor_json = pending_editor_json
+            st.session_state.summary_editor_seed_digest = summary_digest
+        elif st.session_state.get("summary_editor_seed_digest") != summary_digest:
+            st.session_state.summary_editor_json = json.dumps(
+                result.document.to_dict(),
+                ensure_ascii=False,
+                indent=2,
+            )
+            st.session_state.summary_editor_seed_digest = summary_digest
+
+        original_json = st.session_state.get("summary_model_original_json")
+        with st.expander("编辑摘要文字 · 不调用模型"):
+            st.caption(
+                "可以修改标题、署名、导语、分区、条目和 highlights。保存后只在本地重新排版；"
+                "删除 highlights 数组中的文字即可取消对应橙色强调。"
+            )
+            with st.form("summary-local-editor"):
+                edited_json = st.text_area(
+                    "结构化摘要 JSON",
+                    key="summary_editor_json",
+                    height=360,
+                    label_visibility="collapsed",
+                )
+                apply_col, restore_col = st.columns(2, gap="medium")
+                with apply_col:
+                    apply_edit = st.form_submit_button(
+                        "应用修改并重新排版",
+                        icon=":material/edit_document:",
+                        width="stretch",
+                    )
+                with restore_col:
+                    restore_original = st.form_submit_button(
+                        "恢复模型原稿",
+                        icon=":material/history:",
+                        width="stretch",
+                        disabled=not isinstance(original_json, str),
+                    )
+            if apply_edit or restore_original:
+                try:
+                    next_json = original_json if restore_original else edited_json
+                    edited_payload = json.loads(str(next_json))
+                    if not isinstance(edited_payload, dict):
+                        raise SummaryError("编辑内容必须是一个 JSON 对象。")
+                    edited_document = parse_summary_document(
+                        edited_payload,
+                        supplement_numeric_highlights=False,
+                    )
+                    with st.spinner("正在本地重新排版…"):
+                        apply_local_summary_document(edited_document, result)
+                    st.rerun()
+                except (json.JSONDecodeError, SummaryError) as error:
+                    st.error(f"无法应用修改：{error}")
+                except RenderError as error:
+                    st.session_state.summary_export_error = str(error)
+                    st.error(f"文字修改已保留，但重新排版失败：{error}")
+                except Exception as error:
+                    LOGGER.exception("Unexpected local summary edit failure")
+                    st.error(
+                        f"本地编辑发生意外错误（{type(error).__name__}）。"
+                        "详细堆栈已写入 Streamlit Cloud 日志。"
+                    )
 
         if not valid_export:
             export_error = st.session_state.get("summary_export_error")
@@ -560,83 +690,6 @@ with proof_col:
                 "iPhone 或 iPad 可点“分享长图”，也可以长按图片存储。"
             )
             st.image(artifact.png, width="stretch")
-
-        pending_editor_json = st.session_state.pop("summary_editor_pending_json", None)
-        if pending_editor_json is not None:
-            st.session_state.summary_editor_json = pending_editor_json
-            st.session_state.summary_editor_seed_digest = summary_digest
-        elif st.session_state.get("summary_editor_seed_digest") != summary_digest:
-            st.session_state.summary_editor_json = json.dumps(
-                result.document.to_dict(),
-                ensure_ascii=False,
-                indent=2,
-            )
-            st.session_state.summary_editor_seed_digest = summary_digest
-
-        with st.expander("编辑摘要文字 · 不调用模型"):
-            st.caption(
-                "可以修改标题、署名、导语、分区、条目和 highlights。保存后只在本地重新排版；"
-                "删除 highlights 数组中的文字即可取消对应橙色强调。"
-            )
-            with st.form("summary-local-editor"):
-                edited_json = st.text_area(
-                    "结构化摘要 JSON",
-                    key="summary_editor_json",
-                    height=360,
-                    label_visibility="collapsed",
-                )
-                apply_edit = st.form_submit_button(
-                    "应用修改并重新排版",
-                    icon=":material/edit_document:",
-                    width="stretch",
-                )
-            if apply_edit:
-                try:
-                    edited_payload = json.loads(edited_json)
-                    if not isinstance(edited_payload, dict):
-                        raise SummaryError("编辑内容必须是一个 JSON 对象。")
-                    edited_document = parse_summary_document(
-                        edited_payload,
-                        supplement_numeric_highlights=False,
-                    )
-                    edited_result = SummaryResult(
-                        document=edited_document,
-                        model=result.model,
-                        prompt_tokens=result.prompt_tokens,
-                        completion_tokens=result.completion_tokens,
-                        milliseconds=result.milliseconds,
-                    )
-                    edited_digest = hashlib.sha256(
-                        edited_document.to_json().encode("utf-8")
-                    ).hexdigest()
-                    st.session_state.summary_result = edited_result
-                    st.session_state.summary_editor_seed_digest = edited_digest
-                    st.session_state.summary_editor_pending_json = json.dumps(
-                        edited_document.to_dict(),
-                        ensure_ascii=False,
-                        indent=2,
-                    )
-                    st.session_state.pop("summary_export", None)
-                    st.session_state.pop("summary_export_error", None)
-                    with st.spinner("正在本地重新排版…"):
-                        edited_artifact = build_summary_long_image(edited_document, "mobile")
-                    st.session_state.summary_export = {
-                        "digest": edited_digest,
-                        "mode": "mobile",
-                        "artifact": edited_artifact,
-                    }
-                    st.rerun()
-                except (json.JSONDecodeError, SummaryError) as error:
-                    st.error(f"无法应用修改：{error}")
-                except RenderError as error:
-                    st.session_state.summary_export_error = str(error)
-                    st.error(f"文字修改已保留，但重新排版失败：{error}")
-                except Exception as error:
-                    LOGGER.exception("Unexpected local summary edit failure")
-                    st.error(
-                        f"本地编辑发生意外错误（{type(error).__name__}）。"
-                        "详细堆栈已写入 Streamlit Cloud 日志。"
-                    )
 
         with st.expander("生成信息"):
             st.caption(

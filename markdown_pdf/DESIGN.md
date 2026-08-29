@@ -140,11 +140,11 @@ The palette is a cool neutral field with a single warm signal; rarity gives the 
 
 The application sits in a centered container capped at 1240px. On desktop, the summary workbench uses two unequal columns: a compact source-and-settings rail and a wider proof column. Each section begins with a hairline top rule and a two-character numbered marker aligned to its heading. The three choices that materially change the result sit below the editable source, followed by a generation action whose label names the active configuration; language, model, filename, and supplemental guidance remain secondary controls.
 
-At 768px and below, the columns become a natural vertical flow with 1rem side insets, full-width controls, and a 44px minimum touch target. Headings wrap rather than shrink into a desktop proportion. The proof follows the controls, and the exported artifact remains a single reading surface instead of turning into nested cards.
+At 768px and below, the columns become a natural vertical flow with 1rem side insets, full-width controls, and a 44px minimum touch target. Headings wrap rather than shrink into a desktop proportion. In the result region, freshness and quality status appear first, the compact local editor follows, and only then does the potentially very tall artifact appear. The exported artifact remains a single reading surface instead of turning into nested cards.
 
 The long image uses a white rounded proof sheet on the cool canvas. Its sections stack vertically with consistent seams, compact heading-to-body distance, and narrow outer gutters. The proof sheet itself adds no second page inset: only the sheet gutter, section inset, and list hanging indent shape the measure, keeping roughly 80% of the mobile canvas available to body text without making it feel edge-bound.
 
-**The Proof-First Rule.** On wide screens, result proof receives more width than configuration; on narrow screens, source, material choices, action, refinements, and proof follow task order.
+**The Proof-First Rule.** On wide screens, result proof receives more width than configuration; within that proof region, status and recovery controls must remain reachable before a potentially very tall image. On narrow screens, source, material choices, action, refinements, and proof follow task order.
 
 ## Elevation & Depth
 
@@ -208,6 +208,7 @@ The proof is one white editorial sheet. Its sections use two-digit cinnabar numb
 
 - **Do** keep the three material summary choices and primary action immediately after the editable source.
 - **Do** let the proof dominate the desktop composition and preserve task order on mobile.
+- **Do** place freshness, quality, and local-edit controls before the full-height artifact.
 - **Do** use Cinnabar Signal for primary action, numbering, and decisive evidence only; keep routine bullets neutral.
 - **Do** treat white as authored paper and cool gray as the surrounding workbench.
 - **Do** preserve keyboard focus, 44px touch targets, text contrast, and production-quality Chinese line breaking.

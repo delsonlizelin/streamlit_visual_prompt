@@ -144,12 +144,13 @@
       { "name": "The One Signal Rule", "body": "Cinnabar is the only accent hue and should occupy a small minority of any screen; use it for action, order, or evidence.", "section": "colors" },
       { "name": "The Paper-and-Canvas Rule", "body": "White holds authored content and controls; cool gray establishes the workspace around them.", "section": "colors" },
       { "name": "The Weight-Before-Decoration Rule", "body": "Establish hierarchy through size, weight, spacing, and short lines; do not introduce display serifs, novelty fonts, or decorative text effects.", "section": "typography" },
-      { "name": "The Proof-First Rule", "body": "On wide screens, result proof receives more width than configuration; on narrow screens, source, material choices, action, refinements, and proof follow task order.", "section": "layout" },
+      { "name": "The Proof-First Rule", "body": "On wide screens, result proof receives more width than configuration; within that region, freshness, quality, and local-edit controls remain reachable before the potentially tall image. On narrow screens, source, material choices, action, refinements, and proof follow task order.", "section": "layout" },
       { "name": "The Flat-Until-Proven Rule", "body": "Inputs, expanders, uploaders, and empty states stay flat; elevation belongs to a completed artifact, not routine interface chrome.", "section": "elevation" }
     ],
     "dos": [
       "Do keep the three material summary choices and primary action immediately after the editable source.",
       "Do let the proof dominate the desktop composition and preserve task order on mobile.",
+      "Do place freshness, quality, and local-edit controls before the full-height artifact.",
       "Do use Cinnabar Signal for primary action, numbering, and decisive evidence only; keep routine bullets neutral.",
       "Do treat white as authored paper and cool gray as the surrounding workbench.",
       "Do preserve keyboard focus, 44px touch targets, text contrast, and production-quality Chinese line breaking."
