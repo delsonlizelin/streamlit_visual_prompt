@@ -138,7 +138,7 @@ The palette is a cool neutral field with a single warm signal; rarity gives the 
 
 ## Layout
 
-The application sits in a centered container capped at 1240px. On desktop, the summary workbench uses two unequal columns: a compact source-and-settings rail and a wider proof column. Each section begins with a hairline top rule and a two-character numbered marker aligned to its heading. The three choices that materially change the result sit below the editable source, followed by a generation action whose label names the active configuration; language, model, filename, and supplemental guidance remain secondary controls.
+The application sits in a centered container capped at 1240px. On desktop, the summary workbench uses two unequal columns: a compact source-and-settings rail and a wider proof column. Each section begins with a hairline top rule and a two-character numbered marker aligned to its heading. The three choices that materially change the result sit below the editable source, followed by a short length-budget line and one plainly named generation action; language, model, filename, and supplemental guidance remain secondary controls inside a single expander whose collapsed label preserves the active language and model.
 
 At 768px and below, the columns become a natural vertical flow with 1rem side insets, full-width controls, and a 44px minimum touch target. Headings wrap rather than shrink into a desktop proportion. In the result region, freshness and quality status appear first, the compact local editor follows, and only then does the potentially very tall artifact appear. The exported artifact remains a single reading surface instead of turning into nested cards.
 

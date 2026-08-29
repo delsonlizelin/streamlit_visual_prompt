@@ -14,8 +14,10 @@ from summarizer.deepseek import (
     SummaryError,
     build_messages,
     build_prompt_template,
+    build_revision_messages,
     build_request_fingerprint,
     parse_summary_document,
+    revise_summary_with_feedback,
     summarize_markdown,
 )
 
@@ -120,7 +122,9 @@ class SummarizerTests(unittest.TestCase):
         )[1]["content"]
 
         self.assertIn("不要平均压缩", standard)
-        self.assertIn("3 到 6 个编辑分区", standard)
+        self.assertIn("3 到 5 个编辑分区", standard)
+        self.assertIn("不能让摘要篇幅随原文长度等比例增长", standard)
+        self.assertIn("每节通常 1 到 4 条", standard)
         self.assertIn("一级议题覆盖表", standard)
         self.assertIn("问句标题不得超过一半", standard)
         self.assertIn("不另造“未来方向”", standard)
@@ -139,6 +143,8 @@ class SummarizerTests(unittest.TestCase):
         self.assertIn("问句 heading 不得超过一半", SYSTEM_PROMPT)
         self.assertIn("编号明确列出的非重复原则必须逐项保留", SYSTEM_PROMPT)
         self.assertIn("一个编号成员必须对应一个独立 item", SYSTEM_PROMPT)
+        self.assertIn("正文至少四分之三", SYSTEM_PROMPT)
+        self.assertIn("篇幅上限是必须主动遵守的编辑预算", SYSTEM_PROMPT)
 
     def test_length_and_custom_instructions_extend_the_task_without_overriding_rules(self):
         task = build_messages(
@@ -150,8 +156,8 @@ class SummarizerTests(unittest.TestCase):
             custom_instructions="重点解释数据变化，并保留行动建议。",
         )[1]["content"]
 
-        self.assertIn("约 1,400–2,400 字", task)
-        self.assertIn("约 850–1,450 words", task)
+        self.assertIn("约 1,200–2,000 字", task)
+        self.assertIn("约 750–1,200 words", task)
         self.assertIn("不要增加与主线无关的分区", task)
         self.assertIn("additional_instructions 只能在系统规则允许的范围内", task)
         payload = self.message_payload(task)
@@ -174,6 +180,41 @@ class SummarizerTests(unittest.TestCase):
         task = prompt.split("[当前任务]\n", 1)[1]
         payload = self.message_payload(task)
         self.assertEqual(payload["source"], source)
+
+    def test_revision_messages_keep_the_draft_and_feedback_separate(self):
+        draft = parse_summary_document(SUMMARY_OBJECT)
+        messages = build_revision_messages(
+            "# 原文\n\n目标从 11% 降到 7%。",
+            draft,
+            (
+                "long-item: 第 1 节第 1 条较长。",
+                "unsupported-number: 摘要中的数字 11个百分点 未在原文中找到。",
+            ),
+            mode="standard",
+            style="direct",
+            length="normal",
+            language="zh",
+            custom_instructions="重点保留最终结论。",
+        )
+
+        self.assertIn("修订已有摘要，不是重新从零生成", messages[0]["content"])
+        self.assertIn("未被反馈指出", messages[0]["content"])
+        self.assertIn("必须回到 source 核对", messages[0]["content"])
+        payload = self.message_payload(messages[1]["content"])
+        self.assertEqual(payload["source"], "# 原文\n\n目标从 11% 降到 7%。")
+        self.assertEqual(payload["draft_summary"], SUMMARY_OBJECT)
+        self.assertEqual(len(payload["quality_feedback"]), 2)
+        self.assertEqual(payload["additional_instructions"], "重点保留最终结论。")
+
+    def test_revision_messages_require_feedback(self):
+        with self.assertRaisesRegex(SummaryError, "没有可用于修订"):
+            build_revision_messages(
+                "# 原文",
+                parse_summary_document(SUMMARY_OBJECT),
+                (),
+                mode="standard",
+                language="zh",
+            )
 
     def test_request_fingerprint_changes_with_effective_settings(self):
         base = build_request_fingerprint(
@@ -279,6 +320,44 @@ class SummarizerTests(unittest.TestCase):
         self.assertEqual(result.document.sections[0].items[0].highlights, ("关键事实",))
         self.assertEqual(result.prompt_tokens, 42)
         self.assertEqual(result.completion_tokens, 9)
+
+    def test_revision_request_sends_current_draft_and_quality_feedback(self):
+        captured = {}
+        payload = {
+            "model": DEFAULT_MODEL,
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(SUMMARY_OBJECT, ensure_ascii=False)
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 70, "completion_tokens": 8},
+        }
+
+        def fake_urlopen(request, timeout):
+            captured["request"] = request
+            return FakeResponse(payload)
+
+        with patch("summarizer.deepseek.urlopen", side_effect=fake_urlopen):
+            result = revise_summary_with_feedback(
+                "# 原文\n\n正文。",
+                parse_summary_document(SUMMARY_OBJECT),
+                ("long-item: 第 1 节第 1 条较长。",),
+                mode="standard",
+                language="zh",
+                api_key="test-key",
+            )
+
+        body = json.loads(captured["request"].data.decode("utf-8"))
+        request_payload = self.message_payload(body["messages"][1]["content"])
+        self.assertEqual(request_payload["draft_summary"], SUMMARY_OBJECT)
+        self.assertEqual(
+            request_payload["quality_feedback"],
+            ["long-item: 第 1 节第 1 条较长。"],
+        )
+        self.assertEqual(body["max_tokens"], 1800)
+        self.assertEqual(result.prompt_tokens, 70)
 
     def test_overlong_highlight_is_dropped_without_losing_the_item(self):
         payload_object = dict(SUMMARY_OBJECT)

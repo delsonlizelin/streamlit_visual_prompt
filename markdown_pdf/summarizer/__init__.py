@@ -26,8 +26,10 @@ from .deepseek import (
     SummarySection,
     build_messages,
     build_prompt_template,
+    build_revision_messages,
     build_request_fingerprint,
     parse_summary_document,
+    revise_summary_with_feedback,
     summarize_markdown,
 )
 from .quality import (
@@ -65,9 +67,11 @@ __all__ = [
     "SummaryQualityReport",
     "build_messages",
     "build_prompt_template",
+    "build_revision_messages",
     "build_request_fingerprint",
     "parse_summary_document",
     "extract_numeric_tokens",
     "lint_summary_document",
+    "revise_summary_with_feedback",
     "summarize_markdown",
 ]

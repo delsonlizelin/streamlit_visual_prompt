@@ -20,7 +20,7 @@ The product combines source-aware editorial compression with deterministic typog
 
 ## Operating Context
 
-Users paste text, upload Markdown, TXT, or text-based PDFs, or provide a public article URL. They can edit extracted text before generation. Summary generation sends the selected source to DeepSeek only after the user acts; PDF conversion and local file extraction remain local to the app runtime.
+Users paste text, upload Markdown, TXT, or text-based PDFs, or provide a public article URL. They can edit extracted text before generation. Summary generation sends the selected source to DeepSeek only after the user acts; an explicit feedback-revision action additionally sends the current summary and local quality findings. PDF conversion and local file extraction remain local to the app runtime.
 
 ## Capabilities and Constraints
 

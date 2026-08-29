@@ -139,9 +139,10 @@ class StreamlitEntrypointTests(unittest.TestCase):
 
     def test_summary_page_exposes_mobile_first_image_actions(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
-        self.assertIn('artifact = build_summary_long_image(generated_result.document, "mobile")', source)
+        self.assertIn('artifact = build_summary_long_image(result.document, "mobile")', source)
+        self.assertIn("store_model_summary_result", source)
         self.assertIn("native_image_share", source)
-        self.assertIn("长按图片存储", source)
+        self.assertIn("长按保存", source)
         self.assertNotIn('"下载 Markdown"', source)
         self.assertNotIn('"发送到 Markdown PDF"', source)
         self.assertNotIn("build_summary_pdf", source)
@@ -152,13 +153,26 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertIn('"恢复模型原稿"', source)
         self.assertIn("supplement_numeric_highlights=False", source)
         self.assertIn("lint_summary_document", source)
-        self.assertLess(source.index('with st.expander("编辑摘要文字'), source.index("st.image(artifact.png"))
+        self.assertIn('"按检查结果修订"', source)
+        self.assertIn("revise_summary_with_feedback", source)
+        self.assertIn("当前原文、摘要和上述反馈发送到 DeepSeek", source)
+        self.assertLess(source.index('"按检查结果修订"'), source.index('with st.expander("手动编辑摘要'))
+        self.assertLess(source.index('with st.expander("手动编辑摘要'), source.index("st.image(artifact.png"))
 
     def test_summary_page_describes_literal_number_matching_honestly(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
         self.assertIn("数字字面匹配", source)
         self.assertIn("不判断数字的上下文、主体或因果关系", source)
-        self.assertIn("原文已修改，本次只检查摘要结构", source)
+        self.assertIn("本次只检查摘要结构", source)
+
+    def test_summary_page_keeps_the_primary_flow_quiet(self) -> None:
+        source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
+        self.assertIn('"重新生成摘要长图" if result else "生成摘要长图"', source)
+        self.assertIn("篇幅参考", source)
+        self.assertIn("其他设置 ·", source)
+        self.assertIn("长图已完成，自动检查未发现明显问题", source)
+        self.assertNotIn("当前方案：", source)
+        self.assertNotIn("更多设置 · 语言、模型与补充要求", source)
 
     def test_summary_choices_precede_the_primary_action(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")

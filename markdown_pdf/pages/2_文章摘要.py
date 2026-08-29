@@ -34,6 +34,7 @@ SUMMARIZER_SYMBOLS = (
     "build_prompt_template",
     "build_request_fingerprint",
     "parse_summary_document",
+    "revise_summary_with_feedback",
     "summarize_markdown",
 )
 summarizer_backend = importlib.import_module("summarizer.deepseek")
@@ -54,6 +55,7 @@ SummaryResult = summarizer_backend.SummaryResult
 build_prompt_template = summarizer_backend.build_prompt_template
 build_request_fingerprint = summarizer_backend.build_request_fingerprint
 parse_summary_document = summarizer_backend.parse_summary_document
+revise_summary_with_feedback = summarizer_backend.revise_summary_with_feedback
 summarize_markdown = summarizer_backend.summarize_markdown
 
 
@@ -118,6 +120,7 @@ def clear_generated_content() -> None:
     st.session_state.pop("summary_editor_json", None)
     st.session_state.pop("summary_editor_pending_json", None)
     st.session_state.pop("summary_editor_seed_digest", None)
+    st.session_state.pop("summary_revision_count", None)
 
 
 def use_source(*, text: str, output_name: str, meta: dict) -> None:
@@ -152,6 +155,50 @@ def apply_local_summary_document(document: SummaryDocument, previous_result: Sum
         "mode": "mobile",
         "artifact": artifact,
     }
+
+
+def store_model_summary_result(
+    result: SummaryResult,
+    *,
+    source_digest: str,
+    request_fingerprint: str,
+    is_revision: bool = False,
+) -> None:
+    """Store a model result and attempt its deterministic long-image render."""
+    summary_digest = hashlib.sha256(result.document.to_json().encode("utf-8")).hexdigest()
+    st.session_state.summary_result = result
+    st.session_state.summary_source_digest = source_digest
+    st.session_state.summary_request_fingerprint = request_fingerprint
+    st.session_state.summary_model_original_json = json.dumps(
+        result.document.to_dict(),
+        ensure_ascii=False,
+        indent=2,
+    )
+    if is_revision:
+        st.session_state.summary_revision_count = (
+            int(st.session_state.get("summary_revision_count", 0)) + 1
+        )
+    else:
+        st.session_state.pop("summary_revision_count", None)
+    st.session_state.pop("summary_export", None)
+    st.session_state.pop("summary_export_error", None)
+    try:
+        artifact = build_summary_long_image(result.document, "mobile")
+    except RenderError as error:
+        # Preserve the paid model result so layout can be retried locally.
+        st.session_state.summary_export_error = str(error)
+    except Exception as error:
+        LOGGER.exception("Unexpected long-image export failure")
+        st.session_state.summary_export_error = (
+            f"长图渲染发生意外错误（{type(error).__name__}）。"
+            "摘要已经保留，请点击“重新排版长图”重试。"
+        )
+    else:
+        st.session_state.summary_export = {
+            "digest": summary_digest,
+            "mode": "mobile",
+            "artifact": artifact,
+        }
 
 
 def render_source_controls() -> None:
@@ -303,11 +350,11 @@ base_url = secret_value("DEEPSEEK_BASE_URL", DEFAULT_BASE_URL)
 
 st.title("把长文，变成一张读得完的图")
 st.markdown(
-    '<p class="intro">粘贴、上传或读取网页。保留结论、依据和必要边界，排成适合手机阅读和分享的高清长图。</p>',
+    '<p class="intro">添加长文，得到可直接保存与分享的手机摘要长图。</p>',
     unsafe_allow_html=True,
 )
 if not api_key:
-    st.info("尚未配置 DeepSeek API Key。页面可以读取和编辑原文，但暂时不能生成摘要长图。")
+    st.info("未配置 DeepSeek API Key；可编辑原文，但无法生成。")
 
 result = st.session_state.get("summary_result")
 mode_order = ["standard", "section"]
@@ -345,8 +392,6 @@ with workspace_col:
     source_has_changed = bool(
         result and st.session_state.get("summary_source_digest") != current_source_digest
     )
-    if source_has_changed:
-        st.warning("原文已经修改。当前结果仍是上一版；重新生成即可更新。")
 
 with workspace_col:
     selected_mode_label = st.segmented_control(
@@ -380,31 +425,28 @@ with workspace_col:
         (selected_mode, selected_style, selected_length)
     ]
     st.caption(
-        f"当前方案：{selected_mode_label.replace('（推荐）', '')} · "
-        f"{selected_style_label} · {selected_length_label.replace('（推荐）', '')}。"
-        f"中文约 {chinese_target}；英文约 {english_target}。"
-    )
-    generate_verb = "重新生成" if result else "生成"
-    generate_label = (
-        f"{generate_verb} · {selected_mode_label.replace('（推荐）', '')} / "
-        f"{selected_style_label} / {selected_length_label.replace('（推荐）', '')}"
+        f"篇幅参考 · 中文 {chinese_target} · English {english_target}"
     )
     generate_clicked = st.button(
-        generate_label,
+        "重新生成摘要长图" if result else "生成摘要长图",
         type="primary",
         icon=":material/summarize:",
         width="stretch",
         disabled=not api_key,
     )
-    st.caption("点击后才会把当前原文和方案发送到 DeepSeek；生成结果会留在本次会话中。")
+    st.caption("点击后发送当前原文与方案到 DeepSeek。")
     configured_model_index = list(model_options.values()).index(configured_model)
-    with st.expander("更多设置 · 语言、模型与补充要求"):
+    collapsed_language = str(st.session_state.get("summary_language_label", "跟随原文"))
+    collapsed_model = str(
+        st.session_state.get("summary_model_label", list(model_options)[configured_model_index])
+    ).replace("DeepSeek ", "")
+    with st.expander(f"其他设置 · {collapsed_language} · {collapsed_model}"):
         custom_instructions = st.text_area(
             "补充要求（可选）",
             key="summary_custom_instructions",
             height=112,
             max_chars=MAX_CUSTOM_INSTRUCTION_CHARACTERS,
-            placeholder="例如：重点解释数据变化；保留所有行动建议；用更客观的语气。",
+            placeholder="例如：重点解释数据变化；保留行动建议。",
             help=(
                 "补充要求会加入摘要 Prompt，用于指定关注重点、语气或展开方式；"
                 "不能覆盖忠实性、内容结构和输出格式规则。"
@@ -423,14 +465,10 @@ with workspace_col:
                 list(model_options),
                 index=configured_model_index,
                 key="summary_model_label",
+                help="V4 Pro 的 API 单价高于 V4 Flash。",
             )
         model = model_options[model_label]
-        st.caption("V4 Pro 的 API 单价高于 V4 Flash；默认选择遵循部署配置。")
         st.text_input("下载文件名", key="summary_output_name")
-        st.caption(
-            "复制的是当前原文、结构、讲述方式、详细程度、补充要求、语言和系统规则；"
-            "原文中的换行、引号与反斜杠会自动转义为有效 JSON。"
-        )
         clipboard_button(
             build_prompt_template(
                 markdown_source,
@@ -443,14 +481,7 @@ with workspace_col:
             "复制当前完整 Prompt",
             key="summary-prompt-template",
         )
-        st.markdown(
-            "只有点击“生成摘要长图”后，当前原文才会发送到 DeepSeek。"
-            "API Key 不会显示或写入文件。"
-        )
-    st.caption(
-        f"{language_label} · {model_label} · 原文上限 "
-        f"{MAX_SOURCE_CHARACTERS // 10_000} 万字符"
-    )
+        st.caption("复制内容包含当前原文、选项和完整生成规则。")
     current_request_fingerprint = build_request_fingerprint(
         markdown_source,
         mode=selected_mode,
@@ -465,8 +496,6 @@ with workspace_col:
         and st.session_state.get("summary_request_fingerprint")
         != current_request_fingerprint
     )
-    if request_is_stale and not source_has_changed:
-        st.warning("当前结果使用上一版生成设置；重新生成后才会应用现有方案。")
 
 if generate_clicked:
     if not markdown_source.strip():
@@ -487,36 +516,11 @@ if generate_clicked:
                     model=model,
                     base_url=base_url,
                 )
-                summary_digest = hashlib.sha256(
-                    generated_result.document.to_json().encode("utf-8")
-                ).hexdigest()
-                st.session_state.summary_result = generated_result
-                st.session_state.summary_source_digest = current_source_digest
-                st.session_state.summary_request_fingerprint = current_request_fingerprint
-                st.session_state.summary_model_original_json = json.dumps(
-                    generated_result.document.to_dict(),
-                    ensure_ascii=False,
-                    indent=2,
+                store_model_summary_result(
+                    generated_result,
+                    source_digest=current_source_digest,
+                    request_fingerprint=current_request_fingerprint,
                 )
-                st.session_state.pop("summary_export", None)
-                st.session_state.pop("summary_export_error", None)
-                try:
-                    artifact = build_summary_long_image(generated_result.document, "mobile")
-                except RenderError as error:
-                    # Preserve the paid model result so layout can be retried locally.
-                    st.session_state.summary_export_error = str(error)
-                except Exception as error:
-                    LOGGER.exception("Unexpected long-image export failure")
-                    st.session_state.summary_export_error = (
-                        f"长图渲染发生意外错误（{type(error).__name__}）。"
-                        "摘要已经保留，请点击“重新排版长图”重试。"
-                    )
-                else:
-                    st.session_state.summary_export = {
-                        "digest": summary_digest,
-                        "mode": "mobile",
-                        "artifact": artifact,
-                    }
             st.rerun()
         except SummaryError as error:
             st.error(str(error))
@@ -537,8 +541,8 @@ with proof_col:
             """
             <section class="summary-empty" aria-label="尚未生成摘要">
               <div class="summary-empty-rule" aria-hidden="true"></div>
-              <h3>长图会在这里成形</h3>
-              <p>生成后直接预览完整长图。分区数量和篇幅跟随原文，不套固定模板。</p>
+              <h3>摘要会在这里出现</h3>
+              <p>生成后可直接预览、保存和分享。</p>
             </section>
             """,
             unsafe_allow_html=True,
@@ -548,26 +552,18 @@ with proof_col:
         export = st.session_state.get("summary_export")
         valid_export = bool(export and export.get("digest") == summary_digest)
 
-        if source_has_changed:
-            st.info("原文已经修改；这里仍是上一版长图。重新生成即可更新。")
-        elif request_is_stale:
-            st.info("当前结果使用上一版生成设置；重新生成后才会应用现有方案。")
-        elif valid_export:
-            st.success("内容与版式已经完成，可以保存或分享。", icon=":material/check_circle:")
-
         quality_report = lint_summary_document(
             result.document,
             None if source_has_changed else markdown_source,
         )
-        checked_scope = "结构、重复、复合判断与高亮密度"
-        if not source_has_changed:
-            checked_scope += "，以及数字字面匹配"
-        if quality_report.passed:
-            st.caption(
-                f"自动检查：已核对 {quality_report.checked_items} 条摘要的{checked_scope}，"
-                "未发现明显问题。"
-            )
-        else:
+        if source_has_changed:
+            st.info("原文已修改；这里仍是上一版，本次只检查摘要结构。重新生成即可更新。")
+        elif request_is_stale:
+            st.info("生成方案已改变；这里仍是上一版。重新生成即可更新。")
+        elif valid_export and quality_report.passed:
+            st.success("长图已完成，自动检查未发现明显问题。", icon=":material/check_circle:")
+
+        if not quality_report.passed:
             st.warning(f"自动检查发现 {len(quality_report.issues)} 项需要人工核对。")
             with st.expander("查看自动检查结果"):
                 for issue in quality_report.issues:
@@ -577,9 +573,56 @@ with proof_col:
                         "数字字面匹配只检查摘要数字能否在原文找到相同写法（忽略空格、逗号和"
                         "全角百分号），不判断数字的上下文、主体或因果关系。"
                     )
-        if source_has_changed:
-            st.caption("原文已修改，本次只检查摘要结构；数字字面匹配未运行。")
-
+            revise_clicked = st.button(
+                "按检查结果修订",
+                icon=":material/auto_fix_high:",
+                width="stretch",
+                disabled=bool(not api_key or source_has_changed or request_is_stale),
+                key="summary-revise-from-quality",
+            )
+            if source_has_changed or request_is_stale:
+                st.caption("原文或生成方案已改变，请先重新生成，再使用检查反馈修订。")
+            elif not api_key:
+                st.caption("配置 DeepSeek API Key 后可按检查结果修订。")
+            else:
+                st.caption(
+                    "会将当前原文、摘要和上述反馈发送到 DeepSeek；"
+                    "保留未被指出的有效内容。"
+                )
+            if revise_clicked:
+                try:
+                    with st.spinner("正在依据检查结果修订并排版…"):
+                        revised_result = revise_summary_with_feedback(
+                            markdown_source,
+                            result.document,
+                            tuple(
+                                f"{issue.code}: {issue.message}"
+                                for issue in quality_report.issues
+                            ),
+                            mode=selected_mode,
+                            language=language_options[language_label],
+                            style=selected_style,
+                            length=selected_length,
+                            custom_instructions=custom_instructions,
+                            api_key=api_key,
+                            model=model,
+                            base_url=base_url,
+                        )
+                        store_model_summary_result(
+                            revised_result,
+                            source_digest=current_source_digest,
+                            request_fingerprint=current_request_fingerprint,
+                            is_revision=True,
+                        )
+                    st.rerun()
+                except SummaryError as error:
+                    st.error(f"修订失败：{error}")
+                except Exception as error:
+                    LOGGER.exception("Unexpected summary revision failure")
+                    st.error(
+                        f"摘要修订发生意外错误（{type(error).__name__}）。"
+                        "详细堆栈已写入 Streamlit Cloud 日志。"
+                    )
         pending_editor_json = st.session_state.pop("summary_editor_pending_json", None)
         if pending_editor_json is not None:
             st.session_state.summary_editor_json = pending_editor_json
@@ -593,11 +636,8 @@ with proof_col:
             st.session_state.summary_editor_seed_digest = summary_digest
 
         original_json = st.session_state.get("summary_model_original_json")
-        with st.expander("编辑摘要文字 · 不调用模型"):
-            st.caption(
-                "可以修改标题、署名、导语、分区、条目和 highlights。保存后只在本地重新排版；"
-                "删除 highlights 数组中的文字即可取消对应橙色强调。"
-            )
+        with st.expander("手动编辑摘要"):
+            st.caption("直接修改结构化内容；保存后只在本地重新排版。")
             with st.form("summary-local-editor"):
                 edited_json = st.text_area(
                     "结构化摘要 JSON",
@@ -687,12 +727,14 @@ with proof_col:
                 long_image_download_button(export, key="summary-export-download-inline")
             st.caption(
                 f"{artifact.width} × {artifact.height} px · "
-                "iPhone 或 iPad 可点“分享长图”，也可以长按图片存储。"
+                "可分享、下载或长按保存。"
             )
             st.image(artifact.png, width="stretch")
 
         with st.expander("生成信息"):
+            revision_count = int(st.session_state.get("summary_revision_count", 0))
+            revision_note = f" · 已按检查修订 {revision_count} 次" if revision_count else ""
             st.caption(
                 f"{result.model} · {result.completion_tokens or '—'} 输出 Tokens · "
-                f"{result.milliseconds / 1000:.1f} 秒"
+                f"{result.milliseconds / 1000:.1f} 秒{revision_note}"
             )
