@@ -142,7 +142,7 @@ The application sits in a centered container capped at 1240px. On desktop, the s
 
 At 768px and below, the columns become a natural vertical flow with 1rem side insets, full-width controls, and a 44px minimum touch target. Headings wrap rather than shrink into a desktop proportion. The proof follows the controls, and the exported artifact remains a single reading surface instead of turning into nested cards.
 
-The long image uses a white rounded proof sheet on the cool canvas. Its sections stack vertically with consistent seams, compact heading-to-body distance, and narrow outer gutters that reduce unnecessary wrapping without making the text feel edge-bound.
+The long image uses a white rounded proof sheet on the cool canvas. Its sections stack vertically with consistent seams, compact heading-to-body distance, and narrow outer gutters. The proof sheet itself adds no second page inset: only the sheet gutter, section inset, and list hanging indent shape the measure, keeping roughly 80% of the mobile canvas available to body text without making it feel edge-bound.
 
 **The Proof-First Rule.** On wide screens, result proof receives more width than configuration; on narrow screens, source, action, refinements, and proof follow task order.
 

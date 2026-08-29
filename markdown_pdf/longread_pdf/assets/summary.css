@@ -41,6 +41,7 @@ body.summary-output {
 
 .summary-output .longread {
   counter-reset: summary-section;
+  padding: 0;
   border: .25mm solid var(--summary-rule);
   border-radius: 3.5mm;
   overflow: hidden;
@@ -76,8 +77,8 @@ body.summary-output {
 
 .summary-output .longread h2 {
   display: grid;
-  grid-template-columns: 2.2em minmax(0, 1fr);
-  gap: 1mm;
+  grid-template-columns: 1.5em minmax(0, 1fr);
+  gap: .65mm;
   align-items: baseline;
   margin: 0 0 3.2mm;
   color: #17191b;

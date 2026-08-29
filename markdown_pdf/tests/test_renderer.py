@@ -93,6 +93,10 @@ class RendererTests(unittest.TestCase):
         self.assertIn("overflow: hidden", document.html)
         self.assertIn('font-family: "Noto Sans SC"', document.html)
         self.assertIn("NotoSansSC-VariableFont_wght.ttf", document.html)
+        self.assertIn(
+            ".summary-output .longread {\n  counter-reset: summary-section;\n  padding: 0;",
+            document.html,
+        )
 
     def test_structured_summary_escapes_text_and_marks_valid_highlights(self):
         summary = SummaryDocument(
