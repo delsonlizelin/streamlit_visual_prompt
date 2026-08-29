@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import logging
 import re
 
 import streamlit as st
@@ -11,6 +12,9 @@ from input_documents import InputDocumentError, extract_uploaded_document
 from longread_pdf import RenderError, render_summary_long_image
 from ui_components import clipboard_button, page_navigation
 from url_documents import UrlDocumentError, fetch_url_document
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 SUMMARIZER_SYMBOLS = (
@@ -86,8 +90,12 @@ def secret_value(name: str, default: str = "") -> str:
     return str(value) if value is not None else default
 
 
-@st.cache_data(show_spinner=False, max_entries=8)
 def build_summary_long_image(document: SummaryDocument, mode: str):
+    """Render once per explicit action; session state already retains the PNG.
+
+    Keeping this outside ``st.cache_data`` avoids hashing dynamically reloaded
+    summary dataclasses during Streamlit Cloud hot updates.
+    """
     return render_summary_long_image(document, mode=mode)
 
 
@@ -430,6 +438,12 @@ if generate_clicked:
                 except RenderError as error:
                     # Preserve the paid model result so layout can be retried locally.
                     st.session_state.summary_export_error = str(error)
+                except Exception as error:
+                    LOGGER.exception("Unexpected long-image export failure")
+                    st.session_state.summary_export_error = (
+                        f"长图渲染发生意外错误（{type(error).__name__}）。"
+                        "摘要已经保留，请点击“重新排版长图”重试。"
+                    )
                 else:
                     st.session_state.summary_export = {
                         "digest": summary_digest,
@@ -439,8 +453,12 @@ if generate_clicked:
             st.rerun()
         except SummaryError as error:
             st.error(str(error))
-        except Exception:
-            st.error("长图生成失败，请查看 Streamlit Cloud 日志。")
+        except Exception as error:
+            LOGGER.exception("Unexpected summary generation failure")
+            st.error(
+                f"摘要生成发生意外错误（{type(error).__name__}）。"
+                "详细堆栈已写入 Streamlit Cloud 日志。"
+            )
 
 with proof_col:
     st.markdown(
@@ -491,8 +509,12 @@ with proof_col:
                     st.rerun()
                 except RenderError as error:
                     st.error(str(error))
-                except Exception:
-                    st.error("长图排版失败，请查看 Streamlit Cloud 日志。")
+                except Exception as error:
+                    LOGGER.exception("Unexpected long-image retry failure")
+                    st.error(
+                        f"长图排版发生意外错误（{type(error).__name__}）。"
+                        "详细堆栈已写入 Streamlit Cloud 日志。"
+                    )
         else:
             artifact = export["artifact"]
             output_name = safe_filename(st.session_state.summary_output_name)

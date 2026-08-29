@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 
 from longread_pdf.preflight import preflight_markdown
 from longread_pdf.gpt_prompt import GPT_MARKDOWN_PROMPT
@@ -121,6 +122,34 @@ class RendererTests(unittest.TestCase):
         self.assertIn("<strong>高于 2% 目标</strong>", document.html)
         self.assertNotIn("<strong>并不存在</strong>", document.html)
         self.assertEqual(document.sections, 1)
+
+    def test_structured_summary_survives_hot_reloaded_class_identity(self):
+        reloaded_document = SimpleNamespace(
+            title="热更新后的摘要",
+            byline=None,
+            lead=None,
+            sections=(
+                SimpleNamespace(
+                    heading="渲染边界",
+                    items=(
+                        SimpleNamespace(
+                            text="结构相同的摘要不应被误当成 Markdown 字符串。",
+                            highlights=("不应被误当成",),
+                        ),
+                    ),
+                ),
+            ),
+            to_json=lambda: '{"title":"热更新后的摘要"}',
+        )
+
+        document = build_summary_document(
+            reloaded_document,
+            mode="mobile",
+            continuous=True,
+        )
+
+        self.assertIn("热更新后的摘要", document.html)
+        self.assertIn("<strong>不应被误当成</strong>", document.html)
 
     def test_long_image_rejects_desktop_mode(self):
         with self.assertRaisesRegex(RenderError, "只支持平板和手机"):

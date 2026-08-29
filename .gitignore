@@ -7,4 +7,5 @@ markdown_pdf/.smoke-output/
 markdown_pdf/*.pdf
 markdown_pdf/.streamlit/secrets.toml
 markdown_pdf/Noto_Sans_SC.zip
+markdown_pdf/logs-*.txt
 .streamlit/secrets.toml

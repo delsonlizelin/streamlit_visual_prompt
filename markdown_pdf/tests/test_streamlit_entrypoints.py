@@ -145,6 +145,14 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertNotIn('"发送到 Markdown PDF"', source)
         self.assertNotIn("build_summary_pdf", source)
 
+    def test_summary_image_render_avoids_hot_reload_cache_failures(self) -> None:
+        source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
+        function_start = source.index("def build_summary_long_image")
+        decorator_window = source[max(0, function_start - 120) : function_start]
+        self.assertNotIn("@st.cache_data", decorator_window)
+        self.assertIn('LOGGER.exception("Unexpected long-image export failure")', source)
+        self.assertIn('LOGGER.exception("Unexpected long-image retry failure")', source)
+
     def test_download_names_do_not_include_output_mode(self) -> None:
         pdf_source = (APP_ROOT / "streamlit_app.py").read_text(encoding="utf-8")
         summary_source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")

@@ -456,7 +456,14 @@ def build_summary_document(
         raise RenderError(f"未知模式：{mode}")
     if continuous and mode not in LONG_IMAGE_PROFILES:
         raise RenderError("长图只支持平板和手机模式。")
-    if isinstance(summary_source, SummaryDocument):
+    # Streamlit Cloud can hot-reload ``summarizer.deepseek`` while this module
+    # still holds the previous SummaryDocument class object. Branch on the
+    # stable primitive type instead of class identity so an equivalent document
+    # from the reloaded module is not mistaken for Markdown and sent to .strip().
+    if not isinstance(summary_source, str):
+        required_fields = ("title", "byline", "lead", "sections", "to_json")
+        if not all(hasattr(summary_source, field) for field in required_fields):
+            raise RenderError("无法识别结构化摘要，请重新生成摘要后再试。")
         title = summary_source.title
         normalized = summary_source.to_json()
         changed_lines = 0
