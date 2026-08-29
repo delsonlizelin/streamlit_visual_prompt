@@ -119,8 +119,8 @@ body.summary-output {
 }
 
 .summary-output .longread li::marker {
-  color: var(--summary-accent);
-  font-weight: 760;
+  color: var(--summary-muted);
+  font-weight: 650;
 }
 
 .summary-output .longread strong {

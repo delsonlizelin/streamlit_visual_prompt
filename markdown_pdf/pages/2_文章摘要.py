@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import json
 import logging
 import re
 
@@ -10,6 +11,7 @@ import streamlit as st
 import ui_components
 from input_documents import InputDocumentError, extract_uploaded_document
 from longread_pdf import RenderError, render_summary_long_image
+from summarizer.quality import lint_summary_document
 from ui_components import clipboard_button, page_navigation
 from url_documents import UrlDocumentError, fetch_url_document
 
@@ -28,7 +30,9 @@ SUMMARIZER_SYMBOLS = (
     "STYLE_LABELS",
     "SummaryDocument",
     "SummaryError",
+    "SummaryResult",
     "build_prompt_template",
+    "parse_summary_document",
     "summarize_markdown",
 )
 summarizer_backend = importlib.import_module("summarizer.deepseek")
@@ -45,7 +49,9 @@ MODE_LABELS = summarizer_backend.MODE_LABELS
 STYLE_LABELS = summarizer_backend.STYLE_LABELS
 SummaryDocument = summarizer_backend.SummaryDocument
 SummaryError = summarizer_backend.SummaryError
+SummaryResult = summarizer_backend.SummaryResult
 build_prompt_template = summarizer_backend.build_prompt_template
+parse_summary_document = summarizer_backend.parse_summary_document
 summarize_markdown = summarizer_backend.summarize_markdown
 
 
@@ -105,6 +111,9 @@ def clear_generated_content() -> None:
     st.session_state.pop("summary_export", None)
     st.session_state.pop("summary_export_error", None)
     st.session_state.pop("summary_source_digest", None)
+    st.session_state.pop("summary_editor_json", None)
+    st.session_state.pop("summary_editor_pending_json", None)
+    st.session_state.pop("summary_editor_seed_digest", None)
 
 
 def use_source(*, text: str, output_name: str, meta: dict) -> None:
@@ -307,15 +316,6 @@ with workspace_col:
     )
     if source_is_stale:
         st.warning("原文已经修改。当前结果仍是上一版；重新生成即可更新。")
-    generate_label = "重新生成长图" if result else "生成摘要长图"
-    generate_clicked = st.button(
-        generate_label,
-        type="primary",
-        icon=":material/summarize:",
-        width="stretch",
-        disabled=not api_key,
-    )
-    st.caption("使用下方当前方案生成；需要时再调整结构、讲述方式或详细程度。")
 
 with workspace_col:
     selected_mode_label = st.segmented_control(
@@ -332,7 +332,7 @@ with workspace_col:
         style_labels,
         default=style_labels[0],
         key="summary_style_choice",
-        help="直接摘要保留术语和信息密度；零基础讲解会补背景、解释术语并展开逻辑。",
+        help="直接摘要保留术语和信息密度；易懂解释只用更直白的语言展开原文已有背景与逻辑。",
         width="stretch",
     )
     selected_style = style_order[style_labels.index(selected_style_label)]
@@ -353,6 +353,19 @@ with workspace_col:
         f"{selected_style_label} · {selected_length_label.replace('（推荐）', '')}。"
         f"中文约 {chinese_target}；英文约 {english_target}。"
     )
+    generate_verb = "重新生成" if result else "生成"
+    generate_label = (
+        f"{generate_verb} · {selected_mode_label.replace('（推荐）', '')} / "
+        f"{selected_style_label} / {selected_length_label.replace('（推荐）', '')}"
+    )
+    generate_clicked = st.button(
+        generate_label,
+        type="primary",
+        icon=":material/summarize:",
+        width="stretch",
+        disabled=not api_key,
+    )
+    st.caption("点击后才会把当前原文和方案发送到 DeepSeek；生成结果会留在本次会话中。")
     configured_model_index = list(model_options.values()).index(configured_model)
     with st.expander("更多设置 · 语言、模型与补充要求"):
         custom_instructions = st.text_area(
@@ -486,6 +499,21 @@ with proof_col:
         elif valid_export:
             st.success("内容与版式已经完成，可以保存或分享。", icon=":material/check_circle:")
 
+        quality_report = lint_summary_document(
+            result.document,
+            None if source_is_stale else markdown_source,
+        )
+        if quality_report.passed:
+            st.caption(
+                f"自动检查：已核对 {quality_report.checked_items} 条摘要的结构、重复、"
+                "复合判断、数字来源与高亮密度，未发现明显问题。"
+            )
+        else:
+            st.warning(f"自动检查发现 {len(quality_report.issues)} 项需要人工核对。")
+            with st.expander("查看自动检查结果"):
+                for issue in quality_report.issues:
+                    st.markdown(f"- {issue.message}")
+
         if not valid_export:
             export_error = st.session_state.get("summary_export_error")
             if export_error:
@@ -532,6 +560,83 @@ with proof_col:
                 "iPhone 或 iPad 可点“分享长图”，也可以长按图片存储。"
             )
             st.image(artifact.png, width="stretch")
+
+        pending_editor_json = st.session_state.pop("summary_editor_pending_json", None)
+        if pending_editor_json is not None:
+            st.session_state.summary_editor_json = pending_editor_json
+            st.session_state.summary_editor_seed_digest = summary_digest
+        elif st.session_state.get("summary_editor_seed_digest") != summary_digest:
+            st.session_state.summary_editor_json = json.dumps(
+                result.document.to_dict(),
+                ensure_ascii=False,
+                indent=2,
+            )
+            st.session_state.summary_editor_seed_digest = summary_digest
+
+        with st.expander("编辑摘要文字 · 不调用模型"):
+            st.caption(
+                "可以修改标题、署名、导语、分区、条目和 highlights。保存后只在本地重新排版；"
+                "删除 highlights 数组中的文字即可取消对应橙色强调。"
+            )
+            with st.form("summary-local-editor"):
+                edited_json = st.text_area(
+                    "结构化摘要 JSON",
+                    key="summary_editor_json",
+                    height=360,
+                    label_visibility="collapsed",
+                )
+                apply_edit = st.form_submit_button(
+                    "应用修改并重新排版",
+                    icon=":material/edit_document:",
+                    width="stretch",
+                )
+            if apply_edit:
+                try:
+                    edited_payload = json.loads(edited_json)
+                    if not isinstance(edited_payload, dict):
+                        raise SummaryError("编辑内容必须是一个 JSON 对象。")
+                    edited_document = parse_summary_document(
+                        edited_payload,
+                        supplement_numeric_highlights=False,
+                    )
+                    edited_result = SummaryResult(
+                        document=edited_document,
+                        model=result.model,
+                        prompt_tokens=result.prompt_tokens,
+                        completion_tokens=result.completion_tokens,
+                        milliseconds=result.milliseconds,
+                    )
+                    edited_digest = hashlib.sha256(
+                        edited_document.to_json().encode("utf-8")
+                    ).hexdigest()
+                    st.session_state.summary_result = edited_result
+                    st.session_state.summary_editor_seed_digest = edited_digest
+                    st.session_state.summary_editor_pending_json = json.dumps(
+                        edited_document.to_dict(),
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                    st.session_state.pop("summary_export", None)
+                    st.session_state.pop("summary_export_error", None)
+                    with st.spinner("正在本地重新排版…"):
+                        edited_artifact = build_summary_long_image(edited_document, "mobile")
+                    st.session_state.summary_export = {
+                        "digest": edited_digest,
+                        "mode": "mobile",
+                        "artifact": edited_artifact,
+                    }
+                    st.rerun()
+                except (json.JSONDecodeError, SummaryError) as error:
+                    st.error(f"无法应用修改：{error}")
+                except RenderError as error:
+                    st.session_state.summary_export_error = str(error)
+                    st.error(f"文字修改已保留，但重新排版失败：{error}")
+                except Exception as error:
+                    LOGGER.exception("Unexpected local summary edit failure")
+                    st.error(
+                        f"本地编辑发生意外错误（{type(error).__name__}）。"
+                        "详细堆栈已写入 Streamlit Cloud 日志。"
+                    )
 
         with st.expander("生成信息"):
             st.caption(

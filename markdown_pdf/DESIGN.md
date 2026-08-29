@@ -84,7 +84,7 @@ components:
 
 Markdown PDF feels like a calm desk where source material is edited on one side and a finished proof takes shape on the other. Cool gray canvas, white paper, graphite type, hairline rules, and sparse cinnabar marks create an editorial atmosphere without imitating a newsroom masthead or a generic AI dashboard.
 
-The interface is compact where it asks for input and generous where it proves the result. Numbered steps make the workflow legible, the primary action follows the editor immediately, and the generated artifact receives the dominant share of attention. The exported long image carries the same disciplined hierarchy in a deterministic, mobile-readable format.
+The interface is compact where it asks for input and generous where it proves the result. Numbered steps make the workflow legible, three material summary choices sit between the editor and its explicit generation action, and the generated artifact receives the dominant share of attention. The exported long image carries the same disciplined hierarchy in a deterministic, mobile-readable format.
 
 **Key Characteristics:**
 
@@ -100,7 +100,7 @@ The palette is a cool neutral field with a single warm signal; rarity gives the 
 
 ### Primary
 
-- **Cinnabar Signal** (`colors.accent`): Marks primary actions, step numbers, bullets, and decisive evidence. It is a navigational and semantic cue, not decoration.
+- **Cinnabar Signal** (`colors.accent`): Marks primary actions, step numbers, and decisive evidence. It is a navigational and semantic cue, not decoration; routine list markers stay neutral.
 - **Deep Cinnabar** (`colors.accent-deep`): Reserved for the primary action's hover state so interaction remains clear without adding another hue.
 
 ### Neutral
@@ -138,13 +138,13 @@ The palette is a cool neutral field with a single warm signal; rarity gives the 
 
 ## Layout
 
-The application sits in a centered container capped at 1240px. On desktop, the summary workbench uses two unequal columns: a compact source-and-settings rail and a wider proof column. Each section begins with a hairline top rule and a two-character numbered marker aligned to its heading. The generate action sits immediately below the editable source, while refinements follow as secondary controls.
+The application sits in a centered container capped at 1240px. On desktop, the summary workbench uses two unequal columns: a compact source-and-settings rail and a wider proof column. Each section begins with a hairline top rule and a two-character numbered marker aligned to its heading. The three choices that materially change the result sit below the editable source, followed by a generation action whose label names the active configuration; language, model, filename, and supplemental guidance remain secondary controls.
 
 At 768px and below, the columns become a natural vertical flow with 1rem side insets, full-width controls, and a 44px minimum touch target. Headings wrap rather than shrink into a desktop proportion. The proof follows the controls, and the exported artifact remains a single reading surface instead of turning into nested cards.
 
 The long image uses a white rounded proof sheet on the cool canvas. Its sections stack vertically with consistent seams, compact heading-to-body distance, and narrow outer gutters. The proof sheet itself adds no second page inset: only the sheet gutter, section inset, and list hanging indent shape the measure, keeping roughly 80% of the mobile canvas available to body text without making it feel edge-bound.
 
-**The Proof-First Rule.** On wide screens, result proof receives more width than configuration; on narrow screens, source, action, refinements, and proof follow task order.
+**The Proof-First Rule.** On wide screens, result proof receives more width than configuration; on narrow screens, source, material choices, action, refinements, and proof follow task order.
 
 ## Elevation & Depth
 
@@ -200,15 +200,15 @@ A two-digit cinnabar index sits in a narrow rail beside a strong Graphite Ink he
 
 ### Summary Proof
 
-The proof is one white editorial sheet. Its sections use two-digit cinnabar numbering, natural graphite headings, quiet seams, and concise body copy. Cinnabar emphasizes only conclusion-changing phrases and list markers. Metadata is subordinate, and no fake logo, snapshot, promotional footer, or generic disclaimer is appended.
+The proof is one white editorial sheet. Its sections use two-digit cinnabar numbering, natural graphite headings, neutral gray list markers, quiet seams, and concise body copy. Cinnabar emphasizes only conclusion-changing phrases. Metadata is subordinate, and no fake logo, snapshot, promotional footer, or generic disclaimer is appended.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** keep the primary action immediately after the editable source.
+- **Do** keep the three material summary choices and primary action immediately after the editable source.
 - **Do** let the proof dominate the desktop composition and preserve task order on mobile.
-- **Do** use Cinnabar Signal for primary action, numbering, bullets, and decisive evidence only.
+- **Do** use Cinnabar Signal for primary action, numbering, and decisive evidence only; keep routine bullets neutral.
 - **Do** treat white as authored paper and cool gray as the surrounding workbench.
 - **Do** preserve keyboard focus, 44px touch targets, text contrast, and production-quality Chinese line breaking.
 

@@ -98,6 +98,10 @@ class RendererTests(unittest.TestCase):
             ".summary-output .longread {\n  counter-reset: summary-section;\n  padding: 0;",
             document.html,
         )
+        self.assertIn(
+            ".summary-output .longread li::marker {\n  color: var(--summary-muted);",
+            document.html,
+        )
 
     def test_structured_summary_escapes_text_and_marks_valid_highlights(self):
         summary = SummaryDocument(

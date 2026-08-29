@@ -87,9 +87,9 @@ class StreamlitEntrypointTests(unittest.TestCase):
             for control in app.get("button_group")
             if control.label == "讲述方式"
         )
-        self.assertEqual(style_control.options, ["直接摘要", "零基础讲解"])
-        style_control.set_value("零基础讲解").run()
-        self.assertEqual(style_control.value, "零基础讲解")
+        self.assertEqual(style_control.options, ["直接摘要", "易懂解释"])
+        style_control.set_value("易懂解释").run()
+        self.assertEqual(style_control.value, "易懂解释")
         length_control = next(
             control
             for control in app.get("button_group")
@@ -144,6 +144,16 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertNotIn('"下载 Markdown"', source)
         self.assertNotIn('"发送到 Markdown PDF"', source)
         self.assertNotIn("build_summary_pdf", source)
+
+    def test_summary_page_exposes_local_editor_and_quality_check(self) -> None:
+        source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
+        self.assertIn('"应用修改并重新排版"', source)
+        self.assertIn("supplement_numeric_highlights=False", source)
+        self.assertIn("lint_summary_document", source)
+
+    def test_summary_choices_precede_the_primary_action(self) -> None:
+        source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
+        self.assertLess(source.index('key="summary_length_choice"'), source.index("generate_clicked = st.button"))
 
     def test_summary_image_render_avoids_hot_reload_cache_failures(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")

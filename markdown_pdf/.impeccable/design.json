@@ -80,7 +80,7 @@
       "name": "Primary Action",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "The full-width generation or download action placed directly after the editor.",
+      "description": "The full-width generation or download action placed after the three material summary choices.",
       "html": "<button class=\"ds-btn-primary\" type=\"button\">生成摘要长图</button>",
       "css": ".ds-btn-primary { width: 100%; min-height: 44px; padding: .5rem 1rem; border: 1px solid #b84316; border-radius: .625rem; background: #b84316; color: #fff; font: 600 .95rem/1.4 \"Noto Sans SC\", \"Noto Sans CJK SC\", \"Source Han Sans SC\", \"PingFang SC\", sans-serif; cursor: pointer; transition: border-color 140ms ease-out, background 140ms ease-out, color 140ms ease-out; } .ds-btn-primary:hover { border-color: #92350f; background: #92350f; } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:focus-visible { outline: 3px solid color-mix(in srgb, #b84316 28%, transparent); outline-offset: 2px; }"
     },
@@ -125,14 +125,14 @@
     {
       "name": "Summary Reader Section",
       "kind": "custom",
-      "description": "The signature mobile artifact section: a compact number rail, evidence bullets, and selective emphasis inside one proof sheet whose body measure uses roughly 80% of the canvas.",
+      "description": "The signature mobile artifact section: a compact number rail, neutral bullets, and selective evidence emphasis inside one proof sheet whose body measure uses roughly 80% of the canvas.",
       "html": "<article class=\"ds-summary-section\"><h2><span>01</span><b>AI 与生产率：长期政策课题</b></h2><ul><li>AI 是<strong>新的生产要素</strong>，但回报与落地节奏仍不确定。</li><li>政策判断保留数字、条件与因果边界。</li></ul></article>",
-      "css": ".ds-summary-section { padding: 1.28rem 1.06rem; border-bottom: 1px solid #dfe2e5; background: #fff; color: #222529; font-family: \"Noto Sans SC\", \"Noto Sans CJK SC\", \"Source Han Sans SC\", \"PingFang SC\", sans-serif; } .ds-summary-section h2 { display: grid; grid-template-columns: 1.5em minmax(0, 1fr); gap: .15rem; align-items: baseline; margin: 0 0 .75rem; color: #17191b; font-size: 1.12rem; font-weight: 740; line-height: 1.36; letter-spacing: -.018em; } .ds-summary-section h2 span { color: #b84316; font-size: .92em; font-weight: 720; font-variant-numeric: tabular-nums; } .ds-summary-section h2 b { font: inherit; } .ds-summary-section ul { margin: 0; padding-left: 1.35em; } .ds-summary-section li { margin: 0 0 .52em; padding-left: .22em; color: #34383d; font-size: .95rem; line-height: 1.62; } .ds-summary-section li:last-child { margin-bottom: 0; } .ds-summary-section li::marker, .ds-summary-section strong { color: #b84316; font-weight: 760; }"
+      "css": ".ds-summary-section { padding: 1.28rem 1.06rem; border-bottom: 1px solid #dfe2e5; background: #fff; color: #222529; font-family: \"Noto Sans SC\", \"Noto Sans CJK SC\", \"Source Han Sans SC\", \"PingFang SC\", sans-serif; } .ds-summary-section h2 { display: grid; grid-template-columns: 1.5em minmax(0, 1fr); gap: .15rem; align-items: baseline; margin: 0 0 .75rem; color: #17191b; font-size: 1.12rem; font-weight: 740; line-height: 1.36; letter-spacing: -.018em; } .ds-summary-section h2 span { color: #b84316; font-size: .92em; font-weight: 720; font-variant-numeric: tabular-nums; } .ds-summary-section h2 b { font: inherit; } .ds-summary-section ul { margin: 0; padding-left: 1.35em; } .ds-summary-section li { margin: 0 0 .52em; padding-left: .22em; color: #34383d; font-size: .95rem; line-height: 1.62; } .ds-summary-section li:last-child { margin-bottom: 0; } .ds-summary-section li::marker { color: #626971; font-weight: 650; } .ds-summary-section strong { color: #b84316; font-weight: 760; }"
     }
   ],
   "narrative": {
     "northStar": "The Policy Briefing Workbench",
-    "overview": "Markdown PDF feels like a calm desk where source material is edited on one side and a finished proof takes shape on the other. Cool gray canvas, white paper, graphite type, hairline rules, and sparse cinnabar marks create an editorial atmosphere without imitating a newsroom masthead or a generic AI dashboard.\n\nThe interface is compact where it asks for input and generous where it proves the result. Numbered steps make the workflow legible, the primary action follows the editor immediately, and the generated artifact receives the dominant share of attention. The exported long image carries the same disciplined hierarchy in a deterministic, mobile-readable format.",
+    "overview": "Markdown PDF feels like a calm desk where source material is edited on one side and a finished proof takes shape on the other. Cool gray canvas, white paper, graphite type, hairline rules, and sparse cinnabar marks create an editorial atmosphere without imitating a newsroom masthead or a generic AI dashboard.\n\nThe interface is compact where it asks for input and generous where it proves the result. Numbered steps make the workflow legible, three material summary choices sit between the editor and its explicit generation action, and the generated artifact receives the dominant share of attention. The exported long image carries the same disciplined hierarchy in a deterministic, mobile-readable format.",
     "keyCharacteristics": [
       "Quiet policy-briefing workbench rather than promotional software chrome.",
       "One high-contrast cinnabar signal against cool neutral paper and graphite text.",
@@ -144,13 +144,13 @@
       { "name": "The One Signal Rule", "body": "Cinnabar is the only accent hue and should occupy a small minority of any screen; use it for action, order, or evidence.", "section": "colors" },
       { "name": "The Paper-and-Canvas Rule", "body": "White holds authored content and controls; cool gray establishes the workspace around them.", "section": "colors" },
       { "name": "The Weight-Before-Decoration Rule", "body": "Establish hierarchy through size, weight, spacing, and short lines; do not introduce display serifs, novelty fonts, or decorative text effects.", "section": "typography" },
-      { "name": "The Proof-First Rule", "body": "On wide screens, result proof receives more width than configuration; on narrow screens, source, action, refinements, and proof follow task order.", "section": "layout" },
+      { "name": "The Proof-First Rule", "body": "On wide screens, result proof receives more width than configuration; on narrow screens, source, material choices, action, refinements, and proof follow task order.", "section": "layout" },
       { "name": "The Flat-Until-Proven Rule", "body": "Inputs, expanders, uploaders, and empty states stay flat; elevation belongs to a completed artifact, not routine interface chrome.", "section": "elevation" }
     ],
     "dos": [
-      "Do keep the primary action immediately after the editable source.",
+      "Do keep the three material summary choices and primary action immediately after the editable source.",
       "Do let the proof dominate the desktop composition and preserve task order on mobile.",
-      "Do use Cinnabar Signal for primary action, numbering, bullets, and decisive evidence only.",
+      "Do use Cinnabar Signal for primary action, numbering, and decisive evidence only; keep routine bullets neutral.",
       "Do treat white as authored paper and cool gray as the surrounding workbench.",
       "Do preserve keyboard focus, 44px touch targets, text contrast, and production-quality Chinese line breaking."
     ],

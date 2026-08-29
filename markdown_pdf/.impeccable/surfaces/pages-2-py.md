@@ -34,7 +34,7 @@ related_targets: ["longread_pdf/assets/summary_template.html","longread_pdf/asse
 | Result proof | Largest region on wide screens; natural stack on mobile | Streamlit image + deterministic PNG renderer |
 | Summary header | Title, optional source/author metadata, no fake snapshot or logo | HTML template |
 | Summary sections | One white reading sheet with hairline separation, no nested page inset, and a compact number rail so body copy keeps roughly 80% of the mobile canvas | Structured data + HTML/CSS |
-| Emphasis | 1–2 short spans per item, cinnabar plus weight; color never sole carrier | Escaped HTML spans |
+| Emphasis | 0–2 short spans per item, cinnabar plus weight; routine bullets remain neutral and color is never the sole carrier | Escaped HTML spans |
 | Type | Project-hosted Noto Sans SC variable font, tabular section figures, strong scale contrast | CSS font stack |
 | Elevation | None for controls; only a subtle page lift for the generated artifact | CSS |
 

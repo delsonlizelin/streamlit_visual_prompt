@@ -14,7 +14,7 @@
 
 - Direction: policy-briefing workbench on cool uncoated paper. A compact source/settings rail supports a dominant proof surface. Graphite carries content; cinnabar marks only active state, section numerals, and conclusion-changing evidence.
 - Approved comp: `.impeccable/mocks/summary-workbench-b-approved.png`.
-- Memorable moment: the same numbered reader questions visible in the model's structured output become the exported long image without layout guesswork.
+- Memorable moment: the same numbered editorial sections visible in the model's structured output become the exported long image without layout guesswork.
 - Mobile: the rail becomes a single reading flow above the result; no persistent sidebar.
 
 ## Component and composition inventory
@@ -27,7 +27,7 @@
 | Result proof | Largest region on wide screens; natural stack on mobile | Streamlit image + deterministic PNG renderer |
 | Summary header | Title, optional source/author metadata, no fake snapshot or logo | HTML template |
 | Summary sections | One white reading sheet with hairline separation, no nested page inset, and a compact number rail so body copy keeps roughly 80% of the mobile canvas | Structured data + HTML/CSS |
-| Emphasis | 1–2 short spans per item, cinnabar plus weight; color never sole carrier | Escaped HTML spans |
+| Emphasis | 0–2 short spans per item, cinnabar plus weight; routine bullets remain neutral and color is never the sole carrier | Escaped HTML spans |
 | Type | Project-hosted Noto Sans SC variable font, tabular section figures, strong scale contrast | CSS font stack |
 | Elevation | None for controls; only a subtle page lift for the generated artifact | CSS |
 

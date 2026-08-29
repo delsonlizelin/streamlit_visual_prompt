@@ -26,6 +26,12 @@ from .deepseek import (
     parse_summary_document,
     summarize_markdown,
 )
+from .quality import (
+    SummaryQualityIssue,
+    SummaryQualityReport,
+    extract_numeric_tokens,
+    lint_summary_document,
+)
 
 __all__ = [
     "DEFAULT_BASE_URL",
@@ -48,8 +54,12 @@ __all__ = [
     "SummaryItem",
     "SummaryResult",
     "SummarySection",
+    "SummaryQualityIssue",
+    "SummaryQualityReport",
     "build_messages",
     "build_prompt_template",
     "parse_summary_document",
+    "extract_numeric_tokens",
+    "lint_summary_document",
     "summarize_markdown",
 ]
