@@ -1,14 +1,17 @@
 [client]
 showSidebarNavigation = false
 
+[server]
+enableStaticServing = true
+
 [theme]
 base = "light"
-primaryColor = "#345D6F"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F4F6F7"
-textColor = "#252525"
-linkColor = "#345D6F"
-borderColor = "#D9DEE1"
+primaryColor = "#B84316"
+backgroundColor = "#F7F6F2"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#202327"
+linkColor = "#A83C17"
+borderColor = "#DDDEDA"
 showWidgetBorder = true
-baseRadius = "0.35rem"
-buttonRadius = "0.35rem"
+baseRadius = "0.75rem"
+buttonRadius = "0.75rem"

@@ -7,18 +7,19 @@ import shutil
 import tempfile
 import time
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import bleach
 import markdown as markdown_lib
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
+from summarizer.deepseek import SummaryDocument, SummaryItem
 
 
 ASSET_DIR = Path(__file__).resolve().parent / "assets"
+PROJECT_DIR = ASSET_DIR.parent.parent
+SUMMARY_FONT_PATH = PROJECT_DIR / "static" / "fonts" / "NotoSansSC-VariableFont_wght.ttf"
 ALLOWED_MODES = {"desktop", "tablet", "mobile"}
 MODE_PROFILES = {
     "desktop": {
@@ -189,25 +190,40 @@ def _parser_compatible(source: str) -> str:
     return "\n".join(converted)
 
 
-def _extract_front(source: str, fallback_title: str = "未命名长文") -> tuple[str, list[str], str]:
+def _extract_front(
+    source: str,
+    fallback_title: str = "未命名长文",
+) -> tuple[str, list[str], str, bool]:
     lines = source.split("\n")
-    title_index = next((index for index, line in enumerate(lines) if re.match(r"^#\s+", line)), -1)
-    title = re.sub(r"^#\s+", "", lines[title_index]).strip() if title_index >= 0 else fallback_title
+    title_index = next(
+        (index for index, line in enumerate(lines) if re.match(r"^#\s+\S", line)),
+        -1,
+    )
+    has_explicit_title = title_index >= 0
+    title = (
+        re.sub(r"^#\s+", "", lines[title_index]).strip()
+        if has_explicit_title
+        else fallback_title
+    )
     body = lines.copy()
     cursor = 0
-    if title_index >= 0:
+    if has_explicit_title:
         body.pop(title_index)
         cursor = title_index
+    else:
+        # A bare `#` is not a title and should not leave an empty heading in the body.
+        body = [line for line in body if not re.match(r"^#\s*$", line)]
     while cursor < len(body) and not body[cursor].strip():
         cursor += 1
     deck_start = cursor
     deck: list[str] = []
-    while cursor < len(body) and re.match(r"^>\s?", body[cursor]):
-        deck.append(re.sub(r"^>\s?", "", body[cursor]).rstrip().strip())
-        cursor += 1
-    if deck:
-        del body[deck_start:cursor]
-    return title, deck, "\n".join(body)
+    if has_explicit_title:
+        while cursor < len(body) and re.match(r"^>\s?", body[cursor]):
+            deck.append(re.sub(r"^>\s?", "", body[cursor]).rstrip().strip())
+            cursor += 1
+        if deck:
+            del body[deck_start:cursor]
+    return title, deck, "\n".join(body), has_explicit_title
 
 
 def _plain_text(value: str) -> str:
@@ -270,6 +286,64 @@ def _render_article(source: str) -> tuple[str, list[tuple[str, str]]]:
     return re.sub(r"<blockquote>([\s\S]*?)</blockquote>", quote_class, rendered), toc
 
 
+def _wrap_summary_sections(article_html: str) -> str:
+    """Group generated summary sections into a continuous, card-like reading flow."""
+    starts = [match.start() for match in re.finditer(r'<h2\b', article_html)]
+    if not starts:
+        return f'<section class="summary-lead">{article_html}</section>'
+
+    chunks: list[str] = []
+    intro = article_html[: starts[0]].strip()
+    if intro:
+        chunks.append(f'<section class="summary-lead">{intro}</section>')
+    for index, start in enumerate(starts):
+        end = starts[index + 1] if index + 1 < len(starts) else len(article_html)
+        section = article_html[start:end].strip()
+        chunks.append(
+            f'<section class="summary-card" data-section="{index + 1}">{section}</section>'
+        )
+    return "\n".join(chunks)
+
+
+def _highlight_summary_text(item: SummaryItem) -> str:
+    """Escape one item and apply only validated, non-overlapping emphasis spans."""
+    ranges: list[tuple[int, int]] = []
+    for highlight in sorted(item.highlights, key=len, reverse=True):
+        start = item.text.find(highlight)
+        if start < 0:
+            continue
+        end = start + len(highlight)
+        if any(start < existing_end and end > existing_start for existing_start, existing_end in ranges):
+            continue
+        ranges.append((start, end))
+    ranges.sort()
+
+    parts: list[str] = []
+    cursor = 0
+    for start, end in ranges:
+        parts.append(html_lib.escape(item.text[cursor:start]))
+        parts.append(f"<strong>{html_lib.escape(item.text[start:end])}</strong>")
+        cursor = end
+    parts.append(html_lib.escape(item.text[cursor:]))
+    return "".join(parts)
+
+
+def _render_structured_summary(document: SummaryDocument) -> str:
+    parts: list[str] = []
+    if document.lead:
+        parts.append(
+            '<section class="summary-lead" aria-label="全文结论">'
+            f"<p>{html_lib.escape(document.lead)}</p></section>"
+        )
+    for index, section in enumerate(document.sections, start=1):
+        items = "".join(f"<li>{_highlight_summary_text(item)}</li>" for item in section.items)
+        parts.append(
+            f'<section class="summary-card" data-section="{index}">'
+            f"<h2>{html_lib.escape(section.heading)}</h2><ul>{items}</ul></section>"
+        )
+    return "\n".join(parts)
+
+
 def _detect_language(source: str) -> str:
     cjk = len(re.findall(r"[\u3400-\u9fff]", source))
     latin = len(re.findall(r"[A-Za-z]", source))
@@ -306,6 +380,28 @@ def _mode_css(mode: str) -> str:
     })
 
 
+def _summary_font_css() -> str:
+    if not SUMMARY_FONT_PATH.is_file():
+        return ""
+    return (
+        '@font-face {'
+        'font-family: "Noto Sans SC";'
+        f'src: url("{SUMMARY_FONT_PATH.as_uri()}") format("truetype");'
+        'font-style: normal;'
+        'font-weight: 100 900;'
+        'font-display: block;'
+        '}'
+    )
+
+
+def _is_allowed_render_url(url: str, html_uri: str) -> bool:
+    return (
+        url == html_uri
+        or url == SUMMARY_FONT_PATH.as_uri()
+        or url.startswith(("data:", "https://"))
+    )
+
+
 def build_document(markdown_source: str, mode: str = "desktop") -> DocumentBuild:
     if mode not in ALLOWED_MODES:
         raise RenderError(f"未知模式：{mode}")
@@ -313,22 +409,37 @@ def build_document(markdown_source: str, mode: str = "desktop") -> DocumentBuild
         raise RenderError("Markdown 内容不能为空。")
 
     normalized, changed_lines = normalize_markdown(markdown_source)
-    title, deck, body = _extract_front(normalized)
+    title, deck, body, has_explicit_title = _extract_front(normalized)
     article_html, toc = _render_article(body)
     running_title = ""
     css = _mode_css(mode)
     deck_html = "\n".join(f"<p>{_inline_markdown(line)}</p>" for line in deck) if deck else "<p>适合专注阅读的长文版本</p>"
-    toc_html = "\n".join(
-        f'<li><a href="#{identifier}">{html_lib.escape(label)}</a></li>' for identifier, label in toc
-    )
+    front_parts: list[str] = []
+    if has_explicit_title:
+        front_parts.append(
+            '<section class="cover" aria-label="封面">'
+            '<div class="cover-content">'
+            f'<h1>{html_lib.escape(title)}</h1>'
+            f'<div class="cover-deck">{deck_html}</div>'
+            '</div></section>'
+        )
+        if toc:
+            toc_html = "\n".join(
+                f'<li><a href="#{identifier}">{html_lib.escape(label)}</a></li>'
+                for identifier, label in toc
+            )
+            front_parts.append(
+                '<nav class="toc-page" aria-label="目录">'
+                f'<h1>目录</h1><ol class="toc">{toc_html}</ol>'
+                '</nav>'
+            )
     template = (ASSET_DIR / "template.html").read_text(encoding="utf-8")
     document = _fill(template, {
         "LANG": _detect_language(normalized),
         "BASE_URL": "",
         "MODE": mode,
         "TITLE": html_lib.escape(title),
-        "DECK": deck_html,
-        "TOC": toc_html,
+        "FRONT_MATTER": "\n".join(front_parts),
         "CONTENT": article_html,
         "CSS": css,
     })
@@ -336,7 +447,7 @@ def build_document(markdown_source: str, mode: str = "desktop") -> DocumentBuild
 
 
 def build_summary_document(
-    markdown_source: str,
+    summary_source: str | SummaryDocument,
     mode: str = "tablet",
     *,
     continuous: bool = False,
@@ -345,15 +456,32 @@ def build_summary_document(
         raise RenderError(f"未知模式：{mode}")
     if continuous and mode not in LONG_IMAGE_PROFILES:
         raise RenderError("长图只支持平板和手机模式。")
-    if not markdown_source.strip():
-        raise RenderError("Markdown 内容不能为空。")
-
-    normalized, changed_lines = normalize_markdown(markdown_source)
-    title, _deck, body = _extract_front(normalized, fallback_title="文章摘要")
-    article_html, toc = _render_article(body)
+    if isinstance(summary_source, SummaryDocument):
+        title = summary_source.title
+        normalized = summary_source.to_json()
+        changed_lines = 0
+        article_html = _render_structured_summary(summary_source)
+        toc = [(f"section-{index:02d}", section.heading) for index, section in enumerate(summary_source.sections, start=1)]
+        summary_meta = (
+            f'<p class="summary-meta">{html_lib.escape(summary_source.byline)}</p>'
+            if summary_source.byline
+            else ""
+        )
+    else:
+        if not summary_source.strip():
+            raise RenderError("摘要内容不能为空。")
+        normalized, changed_lines = normalize_markdown(summary_source)
+        title, _deck, body, _has_explicit_title = _extract_front(
+            normalized,
+            fallback_title="文章摘要",
+        )
+        article_html, toc = _render_article(body)
+        article_html = _wrap_summary_sections(article_html)
+        summary_meta = '<p class="summary-meta">由原文提炼</p>'
     running_title = _short_running_title(title)
     css_parts = [
         _mode_css(mode),
+        _summary_font_css(),
         (ASSET_DIR / "summary.css").read_text(encoding="utf-8"),
     ]
     if continuous:
@@ -367,7 +495,7 @@ def build_summary_document(
         "OUTPUT_CLASS": "continuous-output" if continuous else "paged-output",
         "TITLE": html_lib.escape(title),
         "SHORT_TITLE": html_lib.escape(running_title),
-        "DATE": datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y年%-m月%-d日"),
+        "SUMMARY_META": summary_meta,
         "CONTENT": article_html,
         "CSS": "\n".join(css_parts),
     })
@@ -411,7 +539,7 @@ def _render_paged_document(build: DocumentBuild, *, mode: str) -> RenderResult:
 
                     def route_request(route: Any) -> None:
                         url = route.request.url
-                        if url == html_uri or url.startswith(("data:", "https://")):
+                        if _is_allowed_render_url(url, html_uri):
                             route.continue_()
                         else:
                             route.abort()
@@ -510,16 +638,16 @@ def render_markdown(markdown_source: str, mode: str = "desktop") -> RenderResult
     return _render_paged_document(build, mode=mode)
 
 
-def render_summary_pdf(markdown_source: str, mode: str = "tablet") -> RenderResult:
-    build = build_summary_document(markdown_source, mode=mode)
+def render_summary_pdf(summary_source: str | SummaryDocument, mode: str = "tablet") -> RenderResult:
+    build = build_summary_document(summary_source, mode=mode)
     return _render_paged_document(build, mode=mode)
 
 
-def render_summary_long_image(markdown_source: str, mode: str = "mobile") -> LongImageResult:
+def render_summary_long_image(summary_source: str | SummaryDocument, mode: str = "mobile") -> LongImageResult:
     if mode not in LONG_IMAGE_PROFILES:
         raise RenderError("长图只支持平板和手机模式。")
 
-    build = build_summary_document(markdown_source, mode=mode, continuous=True)
+    build = build_summary_document(summary_source, mode=mode, continuous=True)
     profile = LONG_IMAGE_PROFILES[mode]
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="markdown-image-") as temp_dir:
@@ -537,7 +665,7 @@ def render_summary_long_image(markdown_source: str, mode: str = "mobile") -> Lon
 
                     def route_request(route: Any) -> None:
                         url = route.request.url
-                        if url == html_uri or url.startswith(("data:", "https://")):
+                        if _is_allowed_render_url(url, html_uri):
                             route.continue_()
                         else:
                             route.abort()
@@ -566,7 +694,10 @@ def render_summary_long_image(markdown_source: str, mode: str = "mobile") -> Lon
                     if int(geometry["horizontalOverflow"]) > 2:
                         raise RenderError("长图内容发生横向溢出，请检查摘要中的长链接或复杂内容。")
                     if int(geometry["height"]) > MAX_LONG_IMAGE_CSS_HEIGHT:
-                        raise RenderError("摘要过长，无法稳定导出为单张长图；请改用 PDF 或 Markdown。")
+                        raise RenderError(
+                            "摘要过长，无法稳定导出为单张长图；请缩短原文，"
+                            "或改用标准篇幅后重试。"
+                        )
                     png = page.locator("body").screenshot(type="png", animations="disabled")
                 finally:
                     browser.close()

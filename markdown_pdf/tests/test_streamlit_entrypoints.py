@@ -5,12 +5,14 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
 
+import streamlit
 from streamlit.testing.v1 import AppTest
 
 from summarizer import deepseek as summarizer_backend
 
 
 APP_ROOT = Path(__file__).resolve().parent.parent
+STREAMLIT_VERSION = tuple(int(part) for part in streamlit.__version__.split(".")[:2])
 
 
 def no_op(*args: object, **kwargs: object) -> None:
@@ -62,6 +64,10 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertIn('"复制完整 Prompt"', source)
         self.assertIn("build_prompt_template", source)
 
+    @unittest.skipIf(
+        STREAMLIT_VERSION < (1, 60),
+        "Streamlit 1.50 AppTest cannot replay pages containing v2 custom components.",
+    )
     def test_summary_page_separates_structure_from_explanation_style(self) -> None:
         app = AppTest.from_file(
             APP_ROOT / "pages" / "2_文章摘要.py",
@@ -103,6 +109,10 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertEqual(model_control.value, "DeepSeek V4 Pro")
         self.assertEqual(list(app.exception), [])
 
+    @unittest.skipIf(
+        STREAMLIT_VERSION < (1, 60),
+        "Streamlit 1.50 AppTest cannot replay pages containing v2 custom components.",
+    )
     def test_summary_page_accepts_optional_prompt_guidance(self) -> None:
         app = AppTest.from_file(
             APP_ROOT / "pages" / "2_文章摘要.py",
@@ -128,10 +138,12 @@ class StreamlitEntrypointTests(unittest.TestCase):
 
     def test_summary_page_exposes_mobile_first_image_actions(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
-        self.assertIn('default="手机长图"', source)
+        self.assertIn('artifact = build_summary_long_image(generated_result.document, "mobile")', source)
         self.assertIn("native_image_share", source)
-        self.assertIn("长按下方图片存储或分享", source)
-        self.assertNotIn('with st.expander("导出 PDF 或高清长图")', source)
+        self.assertIn("长按图片存储", source)
+        self.assertNotIn('"下载 Markdown"', source)
+        self.assertNotIn('"发送到 Markdown PDF"', source)
+        self.assertNotIn("build_summary_pdf", source)
 
     def test_download_names_do_not_include_output_mode(self) -> None:
         pdf_source = (APP_ROOT / "streamlit_app.py").read_text(encoding="utf-8")
@@ -141,9 +153,8 @@ class StreamlitEntrypointTests(unittest.TestCase):
             pdf_source,
         )
         self.assertNotIn("result.mode}.pdf", pdf_source)
-        self.assertIn('file_name=f"{output_name}.summary.pdf"', summary_source)
         self.assertIn('file_name=f"{output_name}.summary.png"', summary_source)
-        self.assertNotIn("summary.{export['mode']}", summary_source)
+        self.assertNotIn(".summary.pdf", summary_source)
 
 
 if __name__ == "__main__":

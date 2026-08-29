@@ -8,16 +8,7 @@
   <style>{{CSS}}</style>
 </head>
 <body class="mode-{{MODE}}">
-  <section class="cover" aria-label="封面">
-    <div class="cover-content">
-      <h1>{{TITLE}}</h1>
-      <div class="cover-deck">{{DECK}}</div>
-    </div>
-  </section>
-  <nav class="toc-page" aria-label="目录">
-    <h1>目录</h1>
-    <ol class="toc">{{TOC}}</ol>
-  </nav>
+  {{FRONT_MATTER}}
   <main class="longread">{{CONTENT}}</main>
 </body>
 </html>

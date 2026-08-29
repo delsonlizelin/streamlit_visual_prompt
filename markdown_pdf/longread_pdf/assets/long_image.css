@@ -2,7 +2,7 @@
   html,
   body.summary-output {
     min-height: 0;
-    background: var(--paper);
+    background: var(--summary-canvas);
   }
 
   body.summary-output {
@@ -12,35 +12,15 @@
 
   .summary-output .summary-shell {
     width: 100%;
+    padding-bottom: 7mm;
     overflow: hidden;
   }
 
   .summary-output.mode-tablet .longread {
-    padding: 5mm 14mm 8mm;
+    margin: 0 6mm;
   }
 
   .summary-output.mode-mobile .longread {
-    padding: 5mm 10mm 7mm;
-  }
-
-  .summary-output .summary-footer {
-    display: block;
-    margin: 0;
-    border-top: .25mm solid var(--rule);
-    color: var(--muted);
-    font-family: var(--sans);
-    font-size: 8.5pt;
-    line-height: 1.4;
-    letter-spacing: .04em;
-  }
-
-  .summary-output.mode-tablet .summary-footer {
-    margin: 0 14mm;
-    padding: 5mm 0 9mm;
-  }
-
-  .summary-output.mode-mobile .summary-footer {
-    margin: 0 10mm;
-    padding: 4.5mm 0 8mm;
+    margin: 0 3.5mm;
   }
 }

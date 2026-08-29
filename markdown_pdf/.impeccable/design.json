@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-29T06:26:42Z",
+  "title": "Design System: Markdown PDF",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Cinnabar Signal",
+        "canonical": "#b84316",
+        "tonalRamp": ["oklch(15% 0.05 43)", "oklch(25% 0.09 43)", "oklch(35% 0.13 43)", "oklch(45% 0.16 43)", "oklch(55% 0.17 43)", "oklch(68% 0.13 43)", "oklch(82% 0.07 43)", "oklch(95% 0.02 43)"]
+      },
+      "accent-deep": {
+        "role": "primary",
+        "displayName": "Deep Cinnabar",
+        "canonical": "#92350f",
+        "tonalRamp": ["oklch(15% 0.05 43)", "oklch(25% 0.09 43)", "oklch(35% 0.13 43)", "oklch(45% 0.15 43)", "oklch(55% 0.15 43)", "oklch(68% 0.12 43)", "oklch(82% 0.06 43)", "oklch(95% 0.02 43)"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Graphite Ink",
+        "canonical": "#191b1e",
+        "tonalRamp": ["oklch(15% 0.009 250)", "oklch(25% 0.009 250)", "oklch(35% 0.008 250)", "oklch(45% 0.007 250)", "oklch(55% 0.006 250)", "oklch(68% 0.005 250)", "oklch(82% 0.004 250)", "oklch(95% 0.002 250)"]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Cool Slate",
+        "canonical": "#626971",
+        "tonalRamp": ["oklch(15% 0.016 250)", "oklch(25% 0.016 250)", "oklch(35% 0.015 250)", "oklch(45% 0.014 250)", "oklch(55% 0.012 250)", "oklch(68% 0.010 250)", "oklch(82% 0.006 250)", "oklch(95% 0.002 250)"]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Hairline Gray",
+        "canonical": "#d9dde0",
+        "tonalRamp": ["oklch(15% 0.006 245)", "oklch(25% 0.006 245)", "oklch(35% 0.006 245)", "oklch(45% 0.005 245)", "oklch(55% 0.005 245)", "oklch(68% 0.004 245)", "oklch(82% 0.003 245)", "oklch(95% 0.001 245)"]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Workbench Gray",
+        "canonical": "#f1f3f4",
+        "tonalRamp": ["oklch(15% 0.004 240)", "oklch(25% 0.004 240)", "oklch(35% 0.004 240)", "oklch(45% 0.004 240)", "oklch(55% 0.003 240)", "oklch(68% 0.003 240)", "oklch(82% 0.002 240)", "oklch(95% 0.002 240)"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Proof White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(25% 0 0)", "oklch(35% 0 0)", "oklch(45% 0 0)", "oklch(55% 0 0)", "oklch(68% 0 0)", "oklch(82% 0 0)", "oklch(100% 0 0)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Page Promise", "purpose": "The single top-level promise on an application page." },
+      "headline": { "displayName": "Workbench Heading", "purpose": "Numbered process landmarks and major interface sections." },
+      "title": { "displayName": "Reader Question", "purpose": "Question-led section titles in the exported summary." },
+      "body": { "displayName": "Editorial Body", "purpose": "Editable source, guidance, and summary explanation." },
+      "label": { "displayName": "Operational Label", "purpose": "Step indices, short labels, and compact metadata." }
+    },
+    "shadows": [
+      {
+        "name": "proof-lift",
+        "value": "0 18px 48px rgba(25, 27, 30, .12)",
+        "purpose": "Soft ambient lift under the completed preview only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-state",
+        "value": "140ms ease-out",
+        "purpose": "Border, background, and text-color transitions on interactive controls."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "mobile-stack",
+        "value": "768px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The full-width generation or download action placed directly after the editor.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">生成摘要长图</button>",
+      "css": ".ds-btn-primary { width: 100%; min-height: 44px; padding: .5rem 1rem; border: 1px solid #b84316; border-radius: .625rem; background: #b84316; color: #fff; font: 600 .95rem/1.4 \"Noto Sans SC\", \"Noto Sans CJK SC\", \"Source Han Sans SC\", \"PingFang SC\", sans-serif; cursor: pointer; transition: border-color 140ms ease-out, background 140ms ease-out, color 140ms ease-out; } .ds-btn-primary:hover { border-color: #92350f; background: #92350f; } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:focus-visible { outline: 3px solid color-mix(in srgb, #b84316 28%, transparent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Navigation",
+      "kind": "nav",
+      "refersTo": "button-secondary",
+      "description": "A compact route to the sibling workflow that stays quieter than the primary action.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"工具导航\"><button class=\"ds-btn-secondary\" type=\"button\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2Z\"/></svg><span>Markdown PDF</span></button></nav>",
+      "css": ".ds-nav { display: block; } .ds-btn-secondary { display: inline-flex; align-items: center; gap: .55rem; min-height: 42px; padding: .5rem 1rem; border: 1px solid #d9dde0; border-radius: .75rem; background: #fff; color: #191b1e; font: 500 .9rem/1.4 \"Noto Sans SC\", \"Noto Sans CJK SC\", \"Source Han Sans SC\", \"PingFang SC\", sans-serif; cursor: pointer; transition: border-color 140ms ease-out, background 140ms ease-out; } .ds-btn-secondary svg { width: 18px; height: 18px; fill: currentColor; } .ds-btn-secondary:hover { border-color: #9aa0a6; background: #f7f8f8; } .ds-btn-secondary:active { background: #f1f3f4; } .ds-btn-secondary:focus-visible { outline: 3px solid color-mix(in srgb, #b84316 28%, transparent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Article URL Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A calm, full-width URL input with explicit label, helper copy, and visible focus.",
+      "html": "<label class=\"ds-field\" for=\"ds-article-url\"><span class=\"ds-field-label\">文章网址</span><input id=\"ds-article-url\" type=\"url\" placeholder=\"https://mp.weixin.qq.com/s/...\"><small>粘贴完整网址后自动读取，无需回车。</small></label>",
+      "css": ".ds-field { display: block; color: #191b1e; font-family: \"Noto Sans SC\", \"Noto Sans CJK SC\", \"Source Han Sans SC\", \"PingFang SC\", sans-serif; } .ds-field-label { display: block; margin: 0 0 .45rem; font-size: .875rem; line-height: 1.35; } .ds-field input { width: 100%; min-height: 44px; box-sizing: border-box; padding: .5rem .75rem; border: 1px solid #d9dde0; border-radius: .625rem; background: #fff; color: #191b1e; font: 400 1rem/1.4 \"Noto Sans SC\", \"Noto Sans CJK SC\", \"Source Han Sans SC\", \"PingFang SC\", sans-serif; outline: none; } .ds-field input:hover { border-color: #aeb4b9; } .ds-field input:focus-visible { border-color: #b84316; box-shadow: 0 0 0 1px #b84316; outline: 3px solid color-mix(in srgb, #b84316 20%, transparent); outline-offset: 1px; } .ds-field small { display: block; margin-top: .4rem; color: #626971; font-size: .82rem; line-height: 1.45; }"
+    },
+    {
+      "name": "Source Segmented Control",
+      "kind": "custom",
+      "description": "Three equal source choices in one quiet rail, with shape as well as color indicating selection.",
+      "html": "<div class=\"ds-segmented\" role=\"radiogroup\" aria-label=\"原文来源\"><button class=\"ds-segment is-selected\" role=\"radio\" aria-checked=\"true\">粘贴文字</button><button class=\"ds-segment\" role=\"radio\" aria-checked=\"false\">上传文件</button><button class=\"ds-segment\" role=\"radio\" aria-checked=\"false\">文章网址</button></div>",
+      "css": ".ds-segmented { display: grid; grid-template-columns: repeat(3, 1fr); overflow: hidden; border: 1px solid #d9dde0; border-radius: .75rem; background: #fff; } .ds-segment { min-height: 40px; padding: .45rem .75rem; border: 0; border-left: 1px solid #d9dde0; background: transparent; color: #191b1e; font: 500 .9rem/1.35 \"Noto Sans SC\", \"Noto Sans CJK SC\", \"Source Han Sans SC\", \"PingFang SC\", sans-serif; cursor: pointer; } .ds-segment:first-child { border-left: 0; } .ds-segment:hover { background: #f1f3f4; } .ds-segment.is-selected { box-shadow: inset 0 0 0 1px #b84316; background: color-mix(in srgb, #b84316 7%, #fff); color: #b84316; } .ds-segment:focus-visible { position: relative; z-index: 1; outline: 3px solid color-mix(in srgb, #b84316 28%, transparent); outline-offset: -3px; } .ds-segment:active { background: color-mix(in srgb, #b84316 11%, #fff); }"
+    },
+    {
+      "name": "Numbered Workbench Heading",
+      "kind": "custom",
+      "description": "A hairline seam, narrow two-digit rail, and strong title orient each workflow stage.",
+      "html": "<header class=\"ds-workbench-heading\"><span>02</span><h2>编辑与提炼</h2></header>",
+      "css": ".ds-workbench-heading { display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: .6rem; align-items: baseline; margin: 1.15rem 0 .65rem; padding-top: .8rem; border-top: 1px solid #d9dde0; font-family: \"Noto Sans SC\", \"Noto Sans CJK SC\", \"Source Han Sans SC\", \"PingFang SC\", sans-serif; } .ds-workbench-heading span { color: #b84316; font-size: .82rem; font-weight: 760; font-variant-numeric: tabular-nums; letter-spacing: .05em; } .ds-workbench-heading h2 { margin: 0; color: #191b1e; font-size: 1.35rem; font-weight: 680; line-height: 1.25; letter-spacing: -.025em; }"
+    },
+    {
+      "name": "Result Proof Card",
+      "kind": "card",
+      "refersTo": "proof-card",
+      "description": "A large white proof surface that dominates the workbench and previews the reading artifact.",
+      "html": "<section class=\"ds-proof\" aria-label=\"结果预览\"><div class=\"ds-proof-rule\" aria-hidden=\"true\"></div><div><h3>长图会在这里成形</h3><p>生成后直接预览完整长图。分区数量和篇幅跟随原文，不套固定模板。</p></div></section>",
+      "css": ".ds-proof { min-height: 430px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; padding: clamp(2rem, 5vw, 4.5rem); border: 1px solid #d9dde0; border-radius: .75rem; background: #fff; color: #191b1e; font-family: \"Noto Sans SC\", \"Noto Sans CJK SC\", \"Source Han Sans SC\", \"PingFang SC\", sans-serif; } .ds-proof-rule { width: 3.5rem; height: 2px; background: #b84316; } .ds-proof h3 { margin: 0 0 .75rem; font-size: 1.35rem; line-height: 1.25; letter-spacing: -.025em; } .ds-proof p { max-width: 34rem; margin: 0; color: #626971; font-size: 1rem; line-height: 1.7; } .ds-proof:hover { border-color: #c9cdd1; } .ds-proof:focus-within { outline: 3px solid color-mix(in srgb, #b84316 18%, transparent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Summary Reader Section",
+      "kind": "custom",
+      "description": "The signature mobile artifact section: numbered editorial heading, evidence bullets, and selective emphasis inside one proof sheet.",
+      "html": "<article class=\"ds-summary-section\"><h2><span>01</span><b>AI 与生产率：长期政策课题</b></h2><ul><li>AI 是<strong>新的生产要素</strong>，但回报与落地节奏仍不确定。</li><li>政策判断保留数字、条件与因果边界。</li></ul></article>",
+      "css": ".ds-summary-section { padding: 1.28rem 1.06rem; border-bottom: 1px solid #dfe2e5; background: #fff; color: #222529; font-family: \"Noto Sans SC\", \"Noto Sans CJK SC\", \"Source Han Sans SC\", \"PingFang SC\", sans-serif; } .ds-summary-section h2 { display: grid; grid-template-columns: 2.2em minmax(0, 1fr); gap: .25rem; align-items: baseline; margin: 0 0 .75rem; color: #17191b; font-size: 1.12rem; font-weight: 740; line-height: 1.36; letter-spacing: -.018em; } .ds-summary-section h2 span { color: #b84316; font-size: .92em; font-weight: 720; font-variant-numeric: tabular-nums; } .ds-summary-section h2 b { font: inherit; } .ds-summary-section ul { margin: 0; padding-left: 1.35em; } .ds-summary-section li { margin: 0 0 .52em; padding-left: .22em; color: #34383d; font-size: .95rem; line-height: 1.62; } .ds-summary-section li:last-child { margin-bottom: 0; } .ds-summary-section li::marker, .ds-summary-section strong { color: #b84316; font-weight: 760; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Policy Briefing Workbench",
+    "overview": "Markdown PDF feels like a calm desk where source material is edited on one side and a finished proof takes shape on the other. Cool gray canvas, white paper, graphite type, hairline rules, and sparse cinnabar marks create an editorial atmosphere without imitating a newsroom masthead or a generic AI dashboard.\n\nThe interface is compact where it asks for input and generous where it proves the result. Numbered steps make the workflow legible, the primary action follows the editor immediately, and the generated artifact receives the dominant share of attention. The exported long image carries the same disciplined hierarchy in a deterministic, mobile-readable format.",
+    "keyCharacteristics": [
+      "Quiet policy-briefing workbench rather than promotional software chrome.",
+      "One high-contrast cinnabar signal against cool neutral paper and graphite text.",
+      "Compact numbered rail on desktop; natural stacked reading flow on mobile.",
+      "Dense, deterministic editorial output with visible conclusions and evidence.",
+      "No fabricated logo, source snapshot, footer, or generic disclaimer in the artifact."
+    ],
+    "rules": [
+      { "name": "The One Signal Rule", "body": "Cinnabar is the only accent hue and should occupy a small minority of any screen; use it for action, order, or evidence.", "section": "colors" },
+      { "name": "The Paper-and-Canvas Rule", "body": "White holds authored content and controls; cool gray establishes the workspace around them.", "section": "colors" },
+      { "name": "The Weight-Before-Decoration Rule", "body": "Establish hierarchy through size, weight, spacing, and short lines; do not introduce display serifs, novelty fonts, or decorative text effects.", "section": "typography" },
+      { "name": "The Proof-First Rule", "body": "On wide screens, result proof receives more width than configuration; on narrow screens, source, action, refinements, and proof follow task order.", "section": "layout" },
+      { "name": "The Flat-Until-Proven Rule", "body": "Inputs, expanders, uploaders, and empty states stay flat; elevation belongs to a completed artifact, not routine interface chrome.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the primary action immediately after the editable source.",
+      "Do let the proof dominate the desktop composition and preserve task order on mobile.",
+      "Do use Cinnabar Signal for primary action, numbering, bullets, and decisive evidence only.",
+      "Do treat white as authored paper and cool gray as the surrounding workbench.",
+      "Do preserve keyboard focus, 44px touch targets, text contrast, and production-quality Chinese line breaking."
+    ],
+    "donts": [
+      "Don't introduce extra accent hues, gradients, decorative illustration, or generic AI-dashboard chrome.",
+      "Don't fragment the long image into floating cards; keep one deterministic editorial reading surface.",
+      "Don't let configuration controls compete visually with the result proof.",
+      "Don't fabricate a logo, source snapshot, footer, performance claim, or disclaimer absent from the source.",
+      "Don't use color as the only signifier of selection, focus, status, or evidence."
+    ]
+  }
+}

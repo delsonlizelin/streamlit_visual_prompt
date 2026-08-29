@@ -52,6 +52,11 @@ if not hasattr(ui_components, "page_shell_styles"):
     except ImportError:
         pass
 page_shell_styles = getattr(ui_components, "page_shell_styles", lambda: None)
+compatible_file_uploader = getattr(
+    ui_components,
+    "compatible_file_uploader",
+    st.file_uploader,
+)
 page_shell_styles()
 page_navigation("pdf")
 
@@ -62,7 +67,7 @@ if "pdf_output_name" not in st.session_state:
 
 st.title("Markdown PDF")
 st.markdown(
-    '<p class="intro">把中英文 Markdown 排成克制、易读的长文 PDF。无需账号、无需 API；文稿只在当前 Streamlit 会话中处理。</p>',
+    '<p class="intro">把 Markdown 排成安静、耐读的长文 PDF。无需账号和 API，文稿只在当前会话中处理。</p>',
     unsafe_allow_html=True,
 )
 
@@ -108,7 +113,7 @@ with input_panel:
         key="gpt-markdown-prompt",
     )
 
-    uploaded = st.file_uploader(
+    uploaded = compatible_file_uploader(
         "上传 Markdown 或 TXT",
         type=["md", "markdown", "txt"],
         max_upload_size=5,

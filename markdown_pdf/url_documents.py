@@ -143,6 +143,7 @@ class _ArticleParser(HTMLParser):
         self._published_depth = 0
         self._ignored_depth = 0
         self._depth = 0
+        self._open_tags: list[str] = []
         self._roots: dict[str, list[int]] = {
             "wechat": [],
             "article": [],
@@ -165,7 +166,8 @@ class _ArticleParser(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
         if tag not in self._void_tags:
-            self._depth += 1
+            self._open_tags.append(tag)
+        self._depth = len(self._open_tags)
         attributes = self._attrs(attrs)
         element_id = attributes.get("id", "")
 
@@ -215,19 +217,34 @@ class _ArticleParser(HTMLParser):
         if tag in self._block_tags:
             self._append("\n\n")
 
+        closing_index = next(
+            (
+                index
+                for index in range(len(self._open_tags) - 1, -1, -1)
+                if self._open_tags[index] == tag
+            ),
+            -1,
+        )
+        if closing_index < 0:
+            # Real-world article HTML often contains unmatched presentational
+            # closing tags. They must not move the capture depth or terminate
+            # an enclosing article root early.
+            return
+        closing_depth = closing_index + 1
+
         for starts in self._roots.values():
-            if starts and starts[-1] == self._depth:
+            if starts and starts[-1] == closing_depth:
                 starts.pop()
         if tag == "title" and self._title_depth:
             self._title_depth -= 1
-        if self._author_depth == self._depth:
+        if self._author_depth == closing_depth:
             self._author_depth = 0
-        if self._published_depth == self._depth:
+        if self._published_depth == closing_depth:
             self._published_depth = 0
         if tag in self._ignored_tags and self._ignored_depth:
             self._ignored_depth -= 1
-        if tag not in self._void_tags:
-            self._depth = max(0, self._depth - 1)
+        self._open_tags = self._open_tags[:closing_index]
+        self._depth = len(self._open_tags)
 
     def handle_data(self, data: str) -> None:
         value = re.sub(r"\s+", " ", data).strip()

@@ -17,9 +17,13 @@ from .deepseek import (
     STYLE_LABELS,
     SYSTEM_PROMPT,
     SummaryError,
+    SummaryDocument,
+    SummaryItem,
     SummaryResult,
+    SummarySection,
     build_messages,
     build_prompt_template,
+    parse_summary_document,
     summarize_markdown,
 )
 
@@ -40,8 +44,12 @@ __all__ = [
     "STYLE_LABELS",
     "SYSTEM_PROMPT",
     "SummaryError",
+    "SummaryDocument",
+    "SummaryItem",
     "SummaryResult",
+    "SummarySection",
     "build_messages",
     "build_prompt_template",
+    "parse_summary_document",
     "summarize_markdown",
 ]

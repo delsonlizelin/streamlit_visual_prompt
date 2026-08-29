@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import base64
+import inspect
 import json
 import re
 
 import streamlit as st
 
 
-_AUTO_ARTICLE_URL_INPUT = st.components.v2.component(
+def _component_v2(*args, **kwargs):  # noqa: ANN002, ANN003
+    """Create a v2 component when supported, otherwise enable a native fallback."""
+    component_api = getattr(st.components, "v2", None)
+    return component_api.component(*args, **kwargs) if component_api is not None else None
+
+
+_AUTO_ARTICLE_URL_INPUT = _component_v2(
     "auto_article_url_input",
     html="""
       <label for="article-url">文章网址</label>
@@ -85,7 +92,7 @@ _AUTO_ARTICLE_URL_INPUT = st.components.v2.component(
 )
 
 
-_NATIVE_IMAGE_SHARE = st.components.v2.component(
+_NATIVE_IMAGE_SHARE = _component_v2(
     "native_image_share",
     html="""
       <button type="button" hidden>分享长图</button>
@@ -154,6 +161,14 @@ _NATIVE_IMAGE_SHARE = st.components.v2.component(
 
 def auto_article_url_input(value: str, *, key: str) -> str:
     """Return a complete pasted or typed URL without requiring Enter."""
+    if _AUTO_ARTICLE_URL_INPUT is None:
+        return st.text_input(
+            "文章网址",
+            value=value,
+            placeholder="https://mp.weixin.qq.com/s/...",
+            help="粘贴完整网址后按 Enter 读取。",
+            key=key,
+        ).strip()
     result = _AUTO_ARTICLE_URL_INPUT(
         data={"value": value},
         default={"url": value},
@@ -165,6 +180,8 @@ def auto_article_url_input(value: str, *, key: str) -> str:
 
 def native_image_share(png: bytes, filename: str, *, key: str) -> None:
     """Show the native file share action when the browser supports Web Share."""
+    if _NATIVE_IMAGE_SHARE is None:
+        return
     _NATIVE_IMAGE_SHARE(
         data={
             "base64": base64.b64encode(png).decode("ascii"),
@@ -175,67 +192,204 @@ def native_image_share(png: bytes, filename: str, *, key: str) -> None:
     )
 
 
+def compatible_file_uploader(label: str, *, max_upload_size: int, **kwargs):  # noqa: ANN003
+    """Use per-widget upload limits when the installed Streamlit supports them."""
+    parameters = inspect.signature(st.file_uploader).parameters
+    if "max_upload_size" in parameters:
+        kwargs["max_upload_size"] = max_upload_size
+    return st.file_uploader(label, **kwargs)
+
+
 def page_shell_styles() -> None:
-    """Apply the shared desktop and mobile shell without covering content."""
+    """Apply a restrained editorial shell shared by both tools."""
     st.markdown(
         """
         <style>
+          @font-face {
+            font-family: "Noto Sans SC";
+            src: url("/app/static/fonts/NotoSansSC-VariableFont_wght.ttf") format("truetype");
+            font-style: normal;
+            font-weight: 100 900;
+            font-display: swap;
+          }
           :root {
             color-scheme: light;
-            --ink: #252525;
-            --muted: #62686b;
-            --rule: #d9dee1;
+            --ink: #191b1e;
+            --muted: #626971;
+            --rule: #d9dde0;
+            --paper: #f1f3f4;
+            --surface: #ffffff;
+            --accent: #b84316;
           }
-          .stApp { color: var(--ink); }
+          .stApp {
+            color: var(--ink);
+            background: var(--paper);
+            font-family: "Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", sans-serif;
+          }
           [data-testid="stAppViewContainer"],
           [data-testid="stAppViewContainer"] > div:has(> [data-testid="stHeader"]),
           [data-testid="stHeader"] {
             background-color: inherit !important;
           }
           [data-testid="stHeader"] {
-            border-bottom: 1px solid color-mix(in srgb, currentColor 9%, transparent);
+            border-bottom: 1px solid var(--rule);
           }
           .block-container {
             max-width: 1240px;
-            padding-top: calc(5.75rem + env(safe-area-inset-top));
-            padding-bottom: 4rem;
+            padding-top: calc(4.1rem + env(safe-area-inset-top));
+            padding-bottom: 5rem;
           }
-          h1 { letter-spacing: -.025em; }
+          h1, h2, h3 {
+            color: var(--ink);
+            letter-spacing: -.025em;
+            text-wrap: balance;
+          }
+          h1 {
+            max-width: 900px;
+            font-family: "Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", sans-serif;
+            font-size: clamp(2.3rem, 3.8vw, 3.8rem);
+            font-weight: 760;
+            line-height: 1.05;
+          }
+          h2 {
+            margin-top: 2.8rem;
+            margin-bottom: .75rem;
+            font-weight: 680;
+          }
           .intro {
-            max-width: 780px;
+            max-width: 680px;
             color: var(--muted);
-            font-size: 1.02rem;
-            line-height: 1.7;
-            margin-bottom: 1.2rem;
+            font-size: 1rem;
+            line-height: 1.68;
+            margin: .65rem 0 1.5rem;
           }
-          .mode-note { color: var(--muted); font-size: .88rem; line-height: 1.55; }
+          .mode-note { color: var(--muted); font-size: .82rem; line-height: 1.55; }
           [data-testid="stFileUploader"] {
             border: 1px solid var(--rule);
-            border-radius: .45rem;
-            padding: .35rem .65rem;
+            border-radius: .75rem;
+            background: var(--surface);
+            padding: .45rem .75rem;
           }
-          [data-testid="stMetric"] { border-top: 1px solid var(--rule); padding-top: .65rem; }
-          .stButton button, .stDownloadButton button { border-radius: .35rem; }
+          [data-testid="stTextArea"] textarea,
+          [data-testid="stTextInput"] input,
+          [data-testid="stSelectbox"] > div > div {
+            border-radius: .625rem;
+            background: var(--surface);
+          }
+          [data-testid="stMetric"] {
+            border-top: 1px solid var(--rule);
+            padding-top: .75rem;
+          }
+          .stButton button, .stDownloadButton button {
+            border-radius: .625rem;
+            font-weight: 600;
+            transition: border-color 140ms ease-out, background 140ms ease-out, color 140ms ease-out;
+          }
+          .stButton button[kind="primary"],
+          .stDownloadButton button[kind="primary"] {
+            border-color: var(--accent);
+            background: var(--accent);
+          }
+          .stButton button[kind="primary"]:hover,
+          .stDownloadButton button[kind="primary"]:hover {
+            border-color: #92350f;
+            background: #92350f;
+          }
+          .stButton button:focus-visible,
+          .stDownloadButton button:focus-visible,
+          [data-testid="stTextArea"] textarea:focus-visible,
+          [data-testid="stTextInput"] input:focus-visible {
+            outline: 3px solid color-mix(in srgb, var(--accent) 28%, transparent);
+            outline-offset: 2px;
+          }
+          [data-testid="stAlert"] {
+            border-radius: .75rem;
+          }
+          [data-testid="stExpander"] {
+            border-color: var(--rule);
+            border-radius: .75rem;
+            background: var(--surface);
+          }
+          [data-testid="stImage"] img {
+            border-radius: .75rem;
+            box-shadow: 0 18px 48px rgba(25, 27, 30, .12);
+          }
+          .summary-empty {
+            min-height: 560px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: clamp(2rem, 5vw, 4.5rem);
+            border: 1px solid var(--rule);
+            border-radius: .75rem;
+            background: var(--surface);
+          }
+          .summary-empty-rule {
+            margin-bottom: auto;
+            width: 3.5rem;
+            height: 2px;
+            background: var(--accent);
+          }
+          .summary-empty h3 {
+            margin: 0 0 .75rem;
+            color: var(--ink);
+            font-size: 1.35rem;
+          }
+          .summary-empty p {
+            max-width: 34rem;
+            margin: 0;
+            color: var(--muted);
+            font-size: 1rem;
+            line-height: 1.7;
+          }
+          .workbench-heading {
+            display: grid;
+            grid-template-columns: 2rem minmax(0, 1fr);
+            gap: .6rem;
+            align-items: baseline;
+            margin: 1.15rem 0 .65rem;
+            border-top: 1px solid var(--rule);
+            padding-top: .8rem;
+          }
+          .workbench-heading span {
+            color: var(--accent);
+            font-size: .82rem;
+            font-weight: 760;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: .05em;
+          }
+          .workbench-heading h2 {
+            margin: 0;
+            font-size: 1.35rem;
+            line-height: 1.25;
+          }
+          div[data-testid="stButton"]:has(button[key="open_summary_page"]),
+          div[data-testid="stButton"]:has(button[key="open_pdf_page"]) {
+            width: fit-content;
+          }
           footer { visibility: hidden; }
 
           @media (max-width: 768px) {
             .block-container {
-              padding-top: calc(5.25rem + env(safe-area-inset-top));
+              padding-top: calc(4.1rem + env(safe-area-inset-top));
               padding-right: 1rem;
               padding-bottom: 3rem;
               padding-left: 1rem;
             }
             h1 {
-              margin-top: .35rem;
-              font-size: clamp(2rem, 10vw, 2.5rem);
-              line-height: 1.15;
+              margin-top: .5rem;
+              line-height: 1.04;
             }
-            h2 { font-size: 1.45rem; line-height: 1.25; }
-            h3 { font-size: 1.18rem; line-height: 1.3; }
+            h2 { font-size: 1.35rem; line-height: 1.25; }
+            h3 { font-size: 1rem; line-height: 1.3; }
             .intro {
-              margin-bottom: .85rem;
-              font-size: .96rem;
+              margin-bottom: .65rem;
+              font-size: 1rem;
               line-height: 1.65;
+            }
+            .summary-empty {
+              min-height: 320px;
+              padding: 1.5rem;
             }
             [data-testid="stFileUploader"] { padding: .2rem .35rem; }
             [data-testid="stTextArea"] textarea {
@@ -260,8 +414,9 @@ def page_shell_styles() -> None:
             [data-testid="stMetric"] {
               min-height: 82px;
               padding: .55rem .65rem;
-              border: 1px solid var(--rule);
-              border-radius: .4rem;
+              border: 0;
+              border-top: 1px solid var(--rule);
+              border-radius: 0;
             }
             [data-testid="stMetricValue"] { font-size: 1.35rem; }
           }
@@ -275,14 +430,14 @@ def page_navigation(current: str) -> None:
     """Render one compact top-level control to the app's other page."""
     if current == "pdf":
         if st.button(
-            "切换到文章摘要",
+            "摘要长图",
             icon=":material/summarize:",
             key="open_summary_page",
         ):
             st.switch_page("pages/2_文章摘要.py")
     elif current == "summary":
         if st.button(
-            "返回 Markdown PDF",
+            "Markdown PDF",
             icon=":material/arrow_back:",
             key="open_pdf_page",
         ):
@@ -296,8 +451,7 @@ def clipboard_button(value: str, label: str, *, key: str) -> None:
     element_id = "copy-" + re.sub(r"[^a-zA-Z0-9_-]+", "-", key).strip("-")
     value_json = json.dumps(value, ensure_ascii=False)
     label_json = json.dumps(label, ensure_ascii=False)
-    st.iframe(
-        f"""
+    markup = f"""
         <button id="{element_id}" type="button">{label}</button>
         <script>
           const button = document.getElementById({json.dumps(element_id)});
@@ -326,16 +480,17 @@ def clipboard_button(value: str, label: str, *, key: str) -> None:
           button {{
             min-height: 38px;
             padding: 0 14px;
-            border: 1px solid #d8d8d8;
-            border-radius: 6px;
+            border: 1px solid #d9dde0;
+            border-radius: 10px;
             background: #fff;
-            color: #252525;
+            color: #191b1e;
             font: 500 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             cursor: pointer;
           }}
-          button:hover {{ border-color: #9a9a9a; }}
+          button:hover {{ border-color: #626971; }}
         </style>
-        """,
-        width="content",
-        height=42,
-    )
+        """
+    if hasattr(st, "iframe"):
+        st.iframe(markup, width="content", height=42)
+    else:
+        st.components.v1.html(markup, height=42)

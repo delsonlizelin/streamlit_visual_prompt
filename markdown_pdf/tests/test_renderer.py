@@ -8,6 +8,7 @@ from longread_pdf.renderer import (
     build_summary_document,
     normalize_markdown,
 )
+from summarizer.deepseek import SummaryDocument, SummaryItem, SummarySection
 
 
 class RendererTests(unittest.TestCase):
@@ -45,6 +46,30 @@ class RendererTests(unittest.TestCase):
         self.assertIn("font-size: 12.1pt", document.html)
         self.assertIn("content: none", document.html)
 
+    def test_document_without_title_starts_directly_with_body(self):
+        document = build_document("开场正文。\n\n## 第一章\n\n继续阅读。", mode="desktop")
+        self.assertNotIn('class="cover"', document.html)
+        self.assertNotIn('class="toc-page"', document.html)
+        self.assertIn("开场正文。", document.html)
+        self.assertIn('id="section-01"', document.html)
+
+    def test_empty_h1_does_not_create_blank_cover(self):
+        document = build_document("#\n\n正文从这里开始。", mode="mobile")
+        self.assertNotIn('class="cover"', document.html)
+        self.assertNotIn("<h1></h1>", document.html)
+        self.assertIn("正文从这里开始。", document.html)
+
+    def test_untitled_quote_stays_in_first_page_body(self):
+        document = build_document("> 这段引用属于正文。\n\n后续正文。", mode="desktop")
+        self.assertNotIn('class="cover"', document.html)
+        self.assertIn("<blockquote>", document.html)
+        self.assertIn("这段引用属于正文。", document.html)
+
+    def test_titled_document_without_sections_does_not_create_blank_toc(self):
+        document = build_document("# 标题\n\n只有正文。", mode="desktop")
+        self.assertIn('class="cover"', document.html)
+        self.assertNotIn('class="toc-page"', document.html)
+
     def test_summary_pdf_uses_compact_template_without_cover_or_toc(self):
         document = build_summary_document(
             "# 摘要标题\n\n## 核心内容\n\n- 第一条。",
@@ -52,6 +77,8 @@ class RendererTests(unittest.TestCase):
         )
         self.assertIn('class="summary-header"', document.html)
         self.assertIn('class="longread"', document.html)
+        self.assertIn('class="summary-card"', document.html)
+        self.assertIn('data-section="1"', document.html)
         self.assertNotIn('class="cover"', document.html)
         self.assertNotIn('class="toc-page"', document.html)
 
@@ -62,8 +89,34 @@ class RendererTests(unittest.TestCase):
             continuous=True,
         )
         self.assertIn("continuous-output", document.html)
-        self.assertIn("阅读摘要", document.html)
+        self.assertNotIn("读到这里，已经抓住全文主线", document.html)
         self.assertIn("overflow: hidden", document.html)
+        self.assertIn('font-family: "Noto Sans SC"', document.html)
+        self.assertIn("NotoSansSC-VariableFont_wght.ttf", document.html)
+
+    def test_structured_summary_escapes_text_and_marks_valid_highlights(self):
+        summary = SummaryDocument(
+            title="结构化摘要 <测试>",
+            byline="Kevin Warsh",
+            lead=None,
+            sections=(
+                SummarySection(
+                    heading="通胀判断是什么？",
+                    items=(
+                        SummaryItem(
+                            text="通胀仍高于 2% 目标，但不应把观点写成事实。",
+                            highlights=("高于 2% 目标", "并不存在"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        document = build_summary_document(summary, mode="mobile", continuous=True)
+        self.assertIn("结构化摘要 &lt;测试&gt;", document.html)
+        self.assertIn("Kevin Warsh", document.html)
+        self.assertIn("<strong>高于 2% 目标</strong>", document.html)
+        self.assertNotIn("<strong>并不存在</strong>", document.html)
+        self.assertEqual(document.sections, 1)
 
     def test_long_image_rejects_desktop_mode(self):
         with self.assertRaisesRegex(RenderError, "只支持平板和手机"):

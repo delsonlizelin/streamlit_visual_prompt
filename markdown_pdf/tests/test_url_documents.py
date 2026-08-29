@@ -64,6 +64,24 @@ class UrlDocumentTests(unittest.TestCase):
         self.assertIn("## 核心内容", document.text)
         self.assertNotIn("版权和推荐内容", document.text)
 
+    def test_unmatched_presentational_tag_does_not_truncate_wechat_body(self):
+        body = "后续正文包含真正需要总结的具体事实与结论。" * 18
+        html = f"""
+        <html><head><meta property="og:title" content="不应截断"></head><body>
+          <div id="js_content">
+            <p>开头元数据。</span></p>
+            <section><p>{body}</p></section>
+          </div>
+          <footer>页脚不应进入正文</footer>
+        </body></html>
+        """
+        document = extract_article_html(
+            html,
+            url="https://mp.weixin.qq.com/s/malformed",
+        )
+        self.assertIn("后续正文包含真正需要总结", document.text)
+        self.assertNotIn("页脚不应进入正文", document.text)
+
     def test_generic_article_uses_article_element_instead_of_page_chrome(self):
         body = "Generic article content with enough detail for extraction. " * 6
         html = f"""
