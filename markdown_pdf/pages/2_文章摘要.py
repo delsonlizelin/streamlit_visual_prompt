@@ -346,6 +346,8 @@ if "summary_output_name" not in st.session_state:
 
 api_key = secret_value("DEEPSEEK_API_KEY")
 configured_model = secret_value("DEEPSEEK_MODEL", DEFAULT_MODEL)
+if configured_model == "deepseek-v4-flash":
+    configured_model = DEFAULT_MODEL
 base_url = secret_value("DEEPSEEK_BASE_URL", DEFAULT_BASE_URL)
 
 st.title("把长文，变成一张读得完的图")
@@ -465,7 +467,10 @@ with workspace_col:
                 list(model_options),
                 index=configured_model_index,
                 key="summary_model_label",
-                help="V4.1 Flash 是截至 9 月 10 日的限时内测模型；V4 Pro 可作为回退。",
+                help=(
+                    "V4.1 Flash 是截至 9 月 10 日的限时内测模型；"
+                    "下线后会自动回退到 V4 Flash 非思考模式。"
+                ),
             )
         model = model_options[model_label]
         st.text_input("下载文件名", key="summary_output_name")

@@ -65,6 +65,19 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertIn("build_prompt_template", source)
         self.assertIn("build_request_fingerprint", source)
 
+    def test_legacy_flash_secret_migrates_to_v4_1(self) -> None:
+        app = AppTest.from_file(
+            APP_ROOT / "pages" / "2_文章摘要.py",
+            default_timeout=10,
+        )
+        app.secrets["DEEPSEEK_MODEL"] = "deepseek-v4-flash"
+        app.run()
+
+        model_control = next(
+            selectbox for selectbox in app.selectbox if selectbox.label == "摘要模型"
+        )
+        self.assertEqual(model_control.value, "DeepSeek V4.1 Flash")
+
     @unittest.skipIf(
         STREAMLIT_VERSION < (1, 60),
         "Streamlit 1.50 AppTest cannot replay pages containing v2 custom components.",

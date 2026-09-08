@@ -17,6 +17,7 @@ SummaryLanguage = Literal["source", "zh", "en"]
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-v4.1-flash-expires-on-0910"
+FALLBACK_MODEL = "deepseek-v4-flash"
 MAX_SOURCE_CHARACTERS = 300_000
 MAX_CUSTOM_INSTRUCTION_CHARACTERS = 4_000
 MAX_ITEMS_PER_SECTION = 32
@@ -633,48 +634,77 @@ def _request_summary(
     if not api_key.strip():
         raise SummaryError("尚未配置 DeepSeek API Key。")
 
-    body = {
-        "model": model,
-        "messages": messages,
-        "thinking": {"type": "enabled"},
-        "reasoning_effort": "high",
-        "max_tokens": max_tokens,
-        "response_format": {"type": "json_object"},
-        "stream": False,
-    }
-    request = Request(
-        f"{base_url.rstrip('/')}/chat/completions",
-        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "User-Agent": "markdown-pdf-streamlit/1.1",
-        },
-        method="POST",
-    )
-
     started = time.monotonic()
+    active_model = model
     for attempt in range(2):
+        body = {
+            "model": active_model,
+            "messages": messages,
+            "thinking": {"type": "enabled"},
+            "reasoning_effort": "high",
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+            "stream": False,
+        }
+        if active_model == FALLBACK_MODEL:
+            body["thinking"] = {"type": "disabled"}
+            body.pop("reasoning_effort")
+            body["temperature"] = 0.2
+        request = Request(
+            f"{base_url.rstrip('/')}/chat/completions",
+            data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "markdown-pdf-streamlit/1.1",
+            },
+            method="POST",
+        )
         try:
             with urlopen(request, timeout=timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except HTTPError as error:
+            detail = ""
+            try:
+                detail = str(
+                    json.loads(error.read().decode("utf-8")).get("error", {}).get("message")
+                    or ""
+                )
+            except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+                pass
+            unavailable_markers = (
+                "not found",
+                "not exist",
+                "model_not_found",
+                "unavailable",
+                "expired",
+                "不存在",
+                "不可用",
+                "已过期",
+                "已下线",
+            )
+            normalized_detail = detail.lower()
+            preview_unavailable = (
+                active_model == DEFAULT_MODEL
+                and error.code in {400, 404, 410}
+                and ("model" in normalized_detail or "模型" in detail)
+                and any(marker in normalized_detail for marker in unavailable_markers)
+            )
+            error.close()
+            if preview_unavailable and attempt == 0:
+                active_model = FALLBACK_MODEL
+                continue
             if error.code in {429, 500, 503} and attempt == 0:
                 retry_after = error.headers.get("Retry-After") if error.headers else None
                 try:
                     delay = min(max(float(retry_after or 0.5), 0.0), 2.0)
                 except ValueError:
                     delay = 0.5
-                error.close()
                 time.sleep(delay)
                 continue
             message = f"DeepSeek API 请求失败（HTTP {error.code}）。"
-            try:
-                detail = json.loads(error.read().decode("utf-8")).get("error", {}).get("message")
-                if detail:
-                    message = f"{message} {detail}"
-            except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
-                pass
+            if detail:
+                message = f"{message} {detail}"
             raise SummaryError(message) from error
         except URLError as error:
             raise SummaryError("无法连接 DeepSeek API，请稍后重试。") from error
@@ -691,7 +721,7 @@ def _request_summary(
             raise SummaryError(f"{error} 已自动重试一次。") from error
         return SummaryResult(
             document=document,
-            model=str(payload.get("model") or model),
+            model=str(payload.get("model") or active_model),
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             milliseconds=round((time.monotonic() - started) * 1000),

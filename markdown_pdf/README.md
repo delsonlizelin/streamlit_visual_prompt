@@ -86,7 +86,7 @@ Python 依赖写在 `requirements.txt`：
 - `pypdf`：从普通文本型 PDF 提取带页面顺序的可编辑文本；
 - `playwright`：控制 Chromium 生成带 CSS 分页的 PDF。
 
-摘要请求使用 Python 标准库发送，没有引入 DeepSeek SDK 或额外 AI 框架。当前默认模型 `deepseek-v4.1-flash-expires-on-0910` 是 DeepSeek V4.1 Flash 的限时中间版本，预计在 2026 年 9 月 10 日下线；届时应改回可用的正式模型标识。请求开启思考模式并把 `reasoning_effort` 固定为 `high`。Prompt 把原文放在可变摘要设置之前，使同一文章修改模式并重新生成时更容易复用 DeepSeek 默认开启的前缀缓存。普通生成仍保持单次请求；自动检查后的语义修订只在用户明确点击时发起。仅在 HTTP 429、500、503，或响应为空、JSON 无效、结构校验失败时重试一次；输出达到长度上限等确定性错误不会盲目重试。
+摘要请求使用 Python 标准库发送，没有引入 DeepSeek SDK 或额外 AI 框架。当前默认模型 `deepseek-v4.1-flash-expires-on-0910` 是 DeepSeek V4.1 Flash 的限时中间版本，预计在 2026 年 9 月 10 日下线。V4.1 请求开启思考模式并把 `reasoning_effort` 固定为 `high`；如果 API 明确返回该模型不存在、不可用、过期或下线，当前请求会自动改用 `deepseek-v4-flash` 非思考模式。Prompt 把原文放在可变摘要设置之前，使同一文章修改模式并重新生成时更容易复用 DeepSeek 默认开启的前缀缓存。普通生成仍保持单次请求；自动检查后的语义修订只在用户明确点击时发起。仅在 HTTP 429、500、503，或响应为空、JSON 无效、结构校验失败时重试一次；输出达到长度上限等确定性错误不会盲目重试。
 
 仓库根目录的 `packages.txt` 会让 Streamlit Community Cloud 安装：
 

@@ -8,6 +8,7 @@ from urllib.error import HTTPError
 
 from summarizer.deepseek import (
     DEFAULT_MODEL,
+    FALLBACK_MODEL,
     MAX_CUSTOM_INSTRUCTION_CHARACTERS,
     MAX_SOURCE_CHARACTERS,
     SYSTEM_PROMPT,
@@ -322,6 +323,51 @@ class SummarizerTests(unittest.TestCase):
         self.assertEqual(result.document.sections[0].items[0].highlights, ("关键事实",))
         self.assertEqual(result.prompt_tokens, 42)
         self.assertEqual(result.completion_tokens, 9)
+
+    def test_expired_v4_1_falls_back_to_non_thinking_v4_flash(self):
+        unavailable = HTTPError(
+            "https://api.deepseek.com/chat/completions",
+            400,
+            "bad request",
+            {},
+            BytesIO(b'{"error":{"message":"Model has expired and is unavailable"}}'),
+        )
+        payload = {
+            "model": FALLBACK_MODEL,
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(SUMMARY_OBJECT, ensure_ascii=False)
+                    }
+                }
+            ],
+            "usage": {},
+        }
+        requests = []
+
+        def fake_urlopen(request, timeout):
+            requests.append(request)
+            if len(requests) == 1:
+                raise unavailable
+            return FakeResponse(payload)
+
+        with patch("summarizer.deepseek.urlopen", side_effect=fake_urlopen):
+            result = summarize_markdown(
+                "# 原文\n\n正文。",
+                mode="standard",
+                language="zh",
+                api_key="test-key",
+            )
+
+        preview_body = json.loads(requests[0].data.decode("utf-8"))
+        fallback_body = json.loads(requests[1].data.decode("utf-8"))
+        self.assertEqual(preview_body["model"], DEFAULT_MODEL)
+        self.assertEqual(preview_body["reasoning_effort"], "high")
+        self.assertEqual(fallback_body["model"], FALLBACK_MODEL)
+        self.assertEqual(fallback_body["thinking"], {"type": "disabled"})
+        self.assertNotIn("reasoning_effort", fallback_body)
+        self.assertEqual(fallback_body["temperature"], 0.2)
+        self.assertEqual(result.model, FALLBACK_MODEL)
 
     def test_revision_request_sends_current_draft_and_quality_feedback(self):
         captured = {}
