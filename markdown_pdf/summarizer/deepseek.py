@@ -16,7 +16,7 @@ SummaryLength = Literal["normal", "detailed"]
 SummaryLanguage = Literal["source", "zh", "en"]
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
-DEFAULT_MODEL = "deepseek-v4-flash"
+DEFAULT_MODEL = "deepseek-v4.1-flash-expires-on-0910"
 MAX_SOURCE_CHARACTERS = 300_000
 MAX_CUSTOM_INSTRUCTION_CHARACTERS = 4_000
 MAX_ITEMS_PER_SECTION = 32
@@ -636,8 +636,8 @@ def _request_summary(
     body = {
         "model": model,
         "messages": messages,
-        "thinking": {"type": "disabled"},
-        "temperature": 0.2,
+        "thinking": {"type": "enabled"},
+        "reasoning_effort": "high",
         "max_tokens": max_tokens,
         "response_format": {"type": "json_object"},
         "stream": False,

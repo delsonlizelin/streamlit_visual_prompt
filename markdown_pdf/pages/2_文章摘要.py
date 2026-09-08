@@ -369,7 +369,7 @@ language_options = {
     "English": "en",
 }
 model_options = {
-    "DeepSeek V4 Flash": "deepseek-v4-flash",
+    "DeepSeek V4.1 Flash": "deepseek-v4.1-flash-expires-on-0910",
     "DeepSeek V4 Pro": "deepseek-v4-pro",
 }
 if configured_model not in model_options.values():
@@ -465,7 +465,7 @@ with workspace_col:
                 list(model_options),
                 index=configured_model_index,
                 key="summary_model_label",
-                help="V4 Pro 的 API 单价高于 V4 Flash。",
+                help="V4.1 Flash 是截至 9 月 10 日的限时内测模型；V4 Pro 可作为回退。",
             )
         model = model_options[model_label]
         st.text_input("下载文件名", key="summary_output_name")

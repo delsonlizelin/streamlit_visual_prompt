@@ -35,7 +35,7 @@ PDF 页面提供三种确定性版式：
 - 核心摘要、按章节梳理两种内容结构，以及直接摘要、易懂解释两种可组合的讲述方式；
 - 标准篇幅和详细展开两档长度；界面根据内容结构与讲述方式显示中文目标字数和英文目标词数，详细展开会保留更多论据、数据、例子、限制与推理过程；
 - 可选的补充要求输入框，用于把关注重点、语气或展开方式加入当前摘要 Prompt；
-- DeepSeek V4 Flash 和 V4 Pro 两种模型可选；默认使用成本较低的 Flash；
+- DeepSeek V4.1 Flash 限时内测版和 V4 Pro 两种模型可选；默认使用 V4.1 Flash；
 - 跟随原文、简体中文、English 三种输出语言；
 - 点击一次完成内容提炼与手机长图排版，模型直接返回经过校验的结构化摘要，不生成或暴露 Markdown 中间稿；
 - 生成 1227 px 宽的 3× 连续高清 PNG 长图，支持浏览器原生分享、下载和 iOS 长按保存；
@@ -68,7 +68,7 @@ $EDITOR .streamlit/secrets.toml
 
 ```toml
 DEEPSEEK_API_KEY = "your-key"
-DEEPSEEK_MODEL = "deepseek-v4-flash"
+DEEPSEEK_MODEL = "deepseek-v4.1-flash-expires-on-0910"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 ```
 
@@ -86,7 +86,7 @@ Python 依赖写在 `requirements.txt`：
 - `pypdf`：从普通文本型 PDF 提取带页面顺序的可编辑文本；
 - `playwright`：控制 Chromium 生成带 CSS 分页的 PDF。
 
-摘要请求使用 Python 标准库发送，没有引入 DeepSeek SDK 或额外 AI 框架。Prompt 把原文放在可变摘要设置之前，使同一文章修改模式并重新生成时更容易复用 DeepSeek 默认开启的前缀缓存。普通生成仍保持单次请求；自动检查后的语义修订只在用户明确点击时发起。仅在 HTTP 429、500、503，或响应为空、JSON 无效、结构校验失败时重试一次；输出达到长度上限等确定性错误不会盲目重试。
+摘要请求使用 Python 标准库发送，没有引入 DeepSeek SDK 或额外 AI 框架。当前默认模型 `deepseek-v4.1-flash-expires-on-0910` 是 DeepSeek V4.1 Flash 的限时中间版本，预计在 2026 年 9 月 10 日下线；届时应改回可用的正式模型标识。请求开启思考模式并把 `reasoning_effort` 固定为 `high`。Prompt 把原文放在可变摘要设置之前，使同一文章修改模式并重新生成时更容易复用 DeepSeek 默认开启的前缀缓存。普通生成仍保持单次请求；自动检查后的语义修订只在用户明确点击时发起。仅在 HTTP 429、500、503，或响应为空、JSON 无效、结构校验失败时重试一次；输出达到长度上限等确定性错误不会盲目重试。
 
 仓库根目录的 `packages.txt` 会让 Streamlit Community Cloud 安装：
 

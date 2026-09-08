@@ -104,7 +104,7 @@ class StreamlitEntrypointTests(unittest.TestCase):
         )
         self.assertEqual(
             model_control.options,
-            ["DeepSeek V4 Flash", "DeepSeek V4 Pro"],
+            ["DeepSeek V4.1 Flash", "DeepSeek V4 Pro"],
         )
         model_control.set_value("DeepSeek V4 Pro").run()
         self.assertEqual(model_control.value, "DeepSeek V4 Pro")
