@@ -88,12 +88,12 @@
 - 详细展开提高输出预算，并保留更多论据、数据、例子、限制、不确定性和推理步骤；
 - 增加可选的补充要求输入框，把用户指定的关注重点、语气或展开方式加入摘要 Prompt；
 - 补充要求不能覆盖忠实性、内容结构、Markdown 与 JSON 输出规则。
-- 增加 DeepSeek V4.1 Flash 限时内测版与 V4 Pro 模型选择，继续使用官方 Chat Completions 与 JSON Output。
+- 增加 DeepSeek V4.1 Flash High 与 V4 Flash 非思考模式选择，继续使用官方 Chat Completions 与 JSON Output。
 
 ## V1.7：API 性能与选项精简（已完成）
 
 - 把文章正文放在可变摘要设置之前，提高同一文章重新生成时的 DeepSeek 前缀缓存机会；
-- 保持非思考、非流式的单次 JSON Output 请求，不增加正常路径的 API 调用；
+- 保持非流式的单次 JSON Output 请求；V4.1 使用 High 思考并预留独立推理预算，V4 Flash 使用非思考模式；
 - 只对 HTTP 429、500、503 瞬时错误进行一次短等待重试，并识别输出被截断的状态；
 - 主流程只保留内容结构、讲述方式和详细程度，其他设置统一渐进展开。
 

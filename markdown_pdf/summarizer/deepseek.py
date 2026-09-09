@@ -18,6 +18,7 @@ SummaryLanguage = Literal["source", "zh", "en"]
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-v4.1-flash-expires-on-0910"
 FALLBACK_MODEL = "deepseek-v4-flash"
+HIGH_REASONING_TOKEN_ALLOWANCE = 16_000
 MAX_SOURCE_CHARACTERS = 300_000
 MAX_CUSTOM_INSTRUCTION_CHARACTERS = 4_000
 MAX_ITEMS_PER_SECTION = 32
@@ -596,6 +597,15 @@ def _response_content(payload: dict[str, Any]) -> tuple[SummaryDocument, int, in
     except (KeyError, IndexError, TypeError) as error:
         raise _RetryableResponseError("DeepSeek 返回了无法识别的响应。") from error
     if choice.get("finish_reason") == "length":
+        usage = payload.get("usage") or {}
+        completion_tokens = int(usage.get("completion_tokens") or 0)
+        reasoning_tokens = int(
+            (usage.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
+        )
+        if reasoning_tokens and reasoning_tokens >= completion_tokens and not content:
+            raise SummaryError(
+                "模型在思考阶段耗尽了输出预算。请切换到 V4 Flash 非思考模式后重试。"
+            )
         raise SummaryError("摘要达到模型输出上限。请改用标准篇幅，或缩短原文后重试。")
     if not isinstance(content, str) or not content.strip():
         raise _RetryableResponseError("DeepSeek 返回了空摘要，请稍后重试。")
@@ -637,16 +647,22 @@ def _request_summary(
     started = time.monotonic()
     active_model = model
     for attempt in range(2):
+        thinking_enabled = active_model != FALLBACK_MODEL
+        transport_max_tokens = max_tokens
+        if thinking_enabled:
+            # Chat Completions counts hidden reasoning and the visible JSON against
+            # the same max_tokens ceiling. The prompt still controls summary length.
+            transport_max_tokens += HIGH_REASONING_TOKEN_ALLOWANCE
         body = {
             "model": active_model,
             "messages": messages,
             "thinking": {"type": "enabled"},
             "reasoning_effort": "high",
-            "max_tokens": max_tokens,
+            "max_tokens": transport_max_tokens,
             "response_format": {"type": "json_object"},
             "stream": False,
         }
-        if active_model == FALLBACK_MODEL:
+        if not thinking_enabled:
             body["thinking"] = {"type": "disabled"}
             body.pop("reasoning_effort")
             body["temperature"] = 0.2

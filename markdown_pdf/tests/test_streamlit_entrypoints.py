@@ -76,7 +76,7 @@ class StreamlitEntrypointTests(unittest.TestCase):
         model_control = next(
             selectbox for selectbox in app.selectbox if selectbox.label == "摘要模型"
         )
-        self.assertEqual(model_control.value, "DeepSeek V4.1 Flash")
+        self.assertEqual(model_control.value, "DeepSeek V4.1 Flash · High")
 
     @unittest.skipIf(
         STREAMLIT_VERSION < (1, 60),
@@ -117,10 +117,10 @@ class StreamlitEntrypointTests(unittest.TestCase):
         )
         self.assertEqual(
             model_control.options,
-            ["DeepSeek V4.1 Flash", "DeepSeek V4 Pro"],
+            ["DeepSeek V4.1 Flash · High", "DeepSeek V4 Flash · 非思考"],
         )
-        model_control.set_value("DeepSeek V4 Pro").run()
-        self.assertEqual(model_control.value, "DeepSeek V4 Pro")
+        model_control.set_value("DeepSeek V4 Flash · 非思考").run()
+        self.assertEqual(model_control.value, "DeepSeek V4 Flash · 非思考")
         self.assertEqual(list(app.exception), [])
 
     @unittest.skipIf(

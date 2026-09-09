@@ -371,8 +371,8 @@ language_options = {
     "English": "en",
 }
 model_options = {
-    "DeepSeek V4.1 Flash": "deepseek-v4.1-flash-expires-on-0910",
-    "DeepSeek V4 Pro": "deepseek-v4-pro",
+    "DeepSeek V4.1 Flash · High": "deepseek-v4.1-flash-expires-on-0910",
+    "DeepSeek V4 Flash · 非思考": "deepseek-v4-flash",
 }
 if configured_model not in model_options.values():
     model_options[f"当前配置 · {configured_model}"] = configured_model
@@ -469,7 +469,7 @@ with workspace_col:
                 key="summary_model_label",
                 help=(
                     "V4.1 Flash 是截至 9 月 10 日的限时内测模型；"
-                    "下线后会自动回退到 V4 Flash 非思考模式。"
+                    "V4 Flash 使用非思考模式，也会在 V4.1 下线后自动接管。"
                 ),
             )
         model = model_options[model_label]

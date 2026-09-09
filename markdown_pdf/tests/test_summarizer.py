@@ -317,7 +317,7 @@ class SummarizerTests(unittest.TestCase):
         self.assertEqual(body["reasoning_effort"], "high")
         self.assertNotIn("temperature", body)
         self.assertEqual(body["response_format"], {"type": "json_object"})
-        self.assertEqual(body["max_tokens"], 1800)
+        self.assertEqual(body["max_tokens"], 17_800)
         self.assertFalse(body["stream"])
         self.assertEqual(result.document.title, "测试主题")
         self.assertEqual(result.document.sections[0].items[0].highlights, ("关键事实",))
@@ -366,6 +366,7 @@ class SummarizerTests(unittest.TestCase):
         self.assertEqual(fallback_body["model"], FALLBACK_MODEL)
         self.assertEqual(fallback_body["thinking"], {"type": "disabled"})
         self.assertNotIn("reasoning_effort", fallback_body)
+        self.assertEqual(fallback_body["max_tokens"], 1_800)
         self.assertEqual(fallback_body["temperature"], 0.2)
         self.assertEqual(result.model, FALLBACK_MODEL)
 
@@ -404,7 +405,7 @@ class SummarizerTests(unittest.TestCase):
             request_payload["quality_feedback"],
             ["long-item: 第 1 节第 1 条较长。"],
         )
-        self.assertEqual(body["max_tokens"], 1800)
+        self.assertEqual(body["max_tokens"], 17_800)
         self.assertEqual(result.prompt_tokens, 70)
 
     def test_overlong_highlight_is_dropped_without_losing_the_item(self):
@@ -640,7 +641,7 @@ class SummarizerTests(unittest.TestCase):
             )
 
         body = json.loads(captured["request"].data.decode("utf-8"))
-        self.assertEqual(body["max_tokens"], 6500)
+        self.assertEqual(body["max_tokens"], 22_500)
         self.assertIn("理解某一结论所必需", body["messages"][1]["content"])
 
     def test_detailed_summary_uses_larger_output_budget_and_custom_prompt(self):
@@ -668,7 +669,7 @@ class SummarizerTests(unittest.TestCase):
             )
 
         body = json.loads(captured["request"].data.decode("utf-8"))
-        self.assertEqual(body["max_tokens"], 6000)
+        self.assertEqual(body["max_tokens"], 22_000)
         self.assertEqual(body["model"], "deepseek-v4-pro")
         self.assertIn("保留所有数字", body["messages"][1]["content"])
 
@@ -818,6 +819,30 @@ class SummarizerTests(unittest.TestCase):
             "summarizer.deepseek.urlopen", return_value=FakeResponse(payload)
         ):
             with self.assertRaisesRegex(SummaryError, "达到模型输出上限"):
+                summarize_markdown(
+                    "# Title",
+                    mode="standard",
+                    language="source",
+                    api_key="test-key",
+                )
+
+    def test_reasoning_budget_exhaustion_has_specific_error(self):
+        payload = {
+            "choices": [
+                {
+                    "finish_reason": "length",
+                    "message": {"content": "", "reasoning_content": "思考中"},
+                }
+            ],
+            "usage": {
+                "completion_tokens": 17_800,
+                "completion_tokens_details": {"reasoning_tokens": 17_800},
+            },
+        }
+        with patch(
+            "summarizer.deepseek.urlopen", return_value=FakeResponse(payload)
+        ):
+            with self.assertRaisesRegex(SummaryError, "思考阶段耗尽"):
                 summarize_markdown(
                     "# Title",
                     mode="standard",
