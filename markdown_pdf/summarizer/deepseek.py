@@ -16,8 +16,7 @@ SummaryLength = Literal["normal", "detailed"]
 SummaryLanguage = Literal["source", "zh", "en"]
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
-DEFAULT_MODEL = "deepseek-v4.1-flash-expires-on-0910"
-FALLBACK_MODEL = "deepseek-v4-flash"
+DEFAULT_MODEL = "deepseek-flash"
 HIGH_REASONING_TOKEN_ALLOWANCE = 16_000
 MAX_SOURCE_CHARACTERS = 300_000
 MAX_CUSTOM_INSTRUCTION_CHARACTERS = 4_000
@@ -428,11 +427,13 @@ def build_request_fingerprint(
     length: SummaryLength = "normal",
     custom_instructions: str = "",
     model: str = DEFAULT_MODEL,
+    thinking: bool = True,
 ) -> str:
     """Hash the effective prompt and model so the UI can detect stale results."""
     request_identity = {
         "prompt_version": PROMPT_VERSION,
         "model": model,
+        "thinking": thinking,
         "messages": build_messages(
             markdown_source.strip(),
             mode=mode,
@@ -591,20 +592,28 @@ def parse_summary_document(
 
 
 def _response_content(payload: dict[str, Any]) -> tuple[SummaryDocument, int, int]:
-    try:
-        choice = payload["choices"][0]
-        content = choice["message"]["content"]
-    except (KeyError, IndexError, TypeError) as error:
-        raise _RetryableResponseError("DeepSeek 返回了无法识别的响应。") from error
+    if not isinstance(payload, Mapping):
+        raise _RetryableResponseError("DeepSeek 返回了无法识别的响应。")
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], Mapping):
+        raise _RetryableResponseError("DeepSeek 返回了无法识别的响应。")
+    choice = choices[0]
+    message = choice.get("message")
+    if not isinstance(message, Mapping):
+        raise _RetryableResponseError("DeepSeek 返回了无法识别的响应。")
+    content = message.get("content")
+    if choice.get("finish_reason") == "content_filter":
+        raise SummaryError("模型服务未返回摘要（内容过滤）。请调整输入后重试。")
+    if choice.get("finish_reason") == "insufficient_system_resource":
+        raise _RetryableResponseError("模型服务资源不足，请稍后重试。")
     if choice.get("finish_reason") == "length":
-        usage = payload.get("usage") or {}
-        completion_tokens = int(usage.get("completion_tokens") or 0)
-        reasoning_tokens = int(
-            (usage.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
-        )
-        if reasoning_tokens and reasoning_tokens >= completion_tokens and not content:
+        usage = payload.get("usage")
+        usage = usage if isinstance(usage, Mapping) else {}
+        details = usage.get("completion_tokens_details")
+        reasoning_tokens = details.get("reasoning_tokens") if isinstance(details, Mapping) else 0
+        if not content and (reasoning_tokens or choice["message"].get("reasoning_content")):
             raise SummaryError(
-                "模型在思考阶段耗尽了输出预算。请切换到 V4 Flash 非思考模式后重试。"
+                "模型在思考阶段耗尽了输出预算。请切换到 V4.1 Flash 非思考模式后重试。"
             )
         raise SummaryError("摘要达到模型输出上限。请改用标准篇幅，或缩短原文后重试。")
     if not isinstance(content, str) or not content.strip():
@@ -624,11 +633,17 @@ def _response_content(payload: dict[str, Any]) -> tuple[SummaryDocument, int, in
     except SummaryError as error:
         raise _RetryableResponseError(str(error)) from error
 
-    usage = payload.get("usage") or {}
+    usage = payload.get("usage")
+    usage = usage if isinstance(usage, Mapping) else {}
+    def token_count(field: str) -> int:
+        try:
+            return max(0, int(usage.get(field) or 0))
+        except (TypeError, ValueError, OverflowError):
+            return 0
     return (
         document,
-        int(usage.get("prompt_tokens") or 0),
-        int(usage.get("completion_tokens") or 0),
+        token_count("prompt_tokens"),
+        token_count("completion_tokens"),
     )
 
 
@@ -638,6 +653,7 @@ def _request_summary(
     max_tokens: int,
     api_key: str,
     model: str = DEFAULT_MODEL,
+    thinking: bool = True,
     base_url: str = DEFAULT_BASE_URL,
     timeout: int = 180,
 ) -> SummaryResult:
@@ -645,16 +661,15 @@ def _request_summary(
         raise SummaryError("尚未配置 DeepSeek API Key。")
 
     started = time.monotonic()
-    active_model = model
     for attempt in range(2):
-        thinking_enabled = active_model != FALLBACK_MODEL
+        thinking_enabled = thinking
         transport_max_tokens = max_tokens
         if thinking_enabled:
             # Chat Completions counts hidden reasoning and the visible JSON against
             # the same max_tokens ceiling. The prompt still controls summary length.
             transport_max_tokens += HIGH_REASONING_TOKEN_ALLOWANCE
         body = {
-            "model": active_model,
+            "model": model,
             "messages": messages,
             "thinking": {"type": "enabled"},
             "reasoning_effort": "high",
@@ -688,28 +703,7 @@ def _request_summary(
                 )
             except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
                 pass
-            unavailable_markers = (
-                "not found",
-                "not exist",
-                "model_not_found",
-                "unavailable",
-                "expired",
-                "不存在",
-                "不可用",
-                "已过期",
-                "已下线",
-            )
-            normalized_detail = detail.lower()
-            preview_unavailable = (
-                active_model == DEFAULT_MODEL
-                and error.code in {400, 404, 410}
-                and ("model" in normalized_detail or "模型" in detail)
-                and any(marker in normalized_detail for marker in unavailable_markers)
-            )
             error.close()
-            if preview_unavailable and attempt == 0:
-                active_model = FALLBACK_MODEL
-                continue
             if error.code in {429, 500, 503} and attempt == 0:
                 retry_after = error.headers.get("Retry-After") if error.headers else None
                 try:
@@ -737,7 +731,7 @@ def _request_summary(
             raise SummaryError(f"{error} 已自动重试一次。") from error
         return SummaryResult(
             document=document,
-            model=str(payload.get("model") or active_model),
+            model=str(payload.get("model") or model),
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             milliseconds=round((time.monotonic() - started) * 1000),
@@ -756,6 +750,7 @@ def summarize_markdown(
     custom_instructions: str = "",
     api_key: str,
     model: str = DEFAULT_MODEL,
+    thinking: bool = True,
     base_url: str = DEFAULT_BASE_URL,
     timeout: int = 180,
 ) -> SummaryResult:
@@ -776,6 +771,7 @@ def summarize_markdown(
         max_tokens=_MAX_OUTPUT_TOKENS[(mode, style, length)],
         api_key=api_key,
         model=model,
+        thinking=thinking,
         base_url=base_url,
         timeout=timeout,
     )
@@ -793,6 +789,7 @@ def revise_summary_with_feedback(
     custom_instructions: str = "",
     api_key: str,
     model: str = DEFAULT_MODEL,
+    thinking: bool = True,
     base_url: str = DEFAULT_BASE_URL,
     timeout: int = 180,
 ) -> SummaryResult:
@@ -816,6 +813,7 @@ def revise_summary_with_feedback(
         max_tokens=_MAX_OUTPUT_TOKENS[(mode, style, length)],
         api_key=api_key,
         model=model,
+        thinking=thinking,
         base_url=base_url,
         timeout=timeout,
     )

@@ -59,6 +59,15 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertEqual(list(app.exception), [])
         self.assertTrue(hasattr(stale_backend, "STYLE_LABELS"))
 
+    def test_old_non_thinking_session_keeps_its_mode(self) -> None:
+        app = AppTest.from_file(APP_ROOT / "pages" / "2_文章摘要.py", default_timeout=10)
+        app.session_state["summary_model_label"] = "DeepSeek V4 Flash · 非思考"
+        app.secrets["DEEPSEEK_MODEL"] = "deepseek-v4.1-flash-expires-on-0910"
+        app.run()
+        self.assertEqual(list(app.exception), [])
+        control = next(c for c in app.selectbox if c.label == "摘要模型")
+        self.assertEqual(control.value, "DeepSeek V4.1 Flash · 非思考")
+
     def test_summary_page_exposes_current_prompt_copy_button(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
         self.assertIn('"复制当前完整 Prompt"', source)
@@ -117,10 +126,10 @@ class StreamlitEntrypointTests(unittest.TestCase):
         )
         self.assertEqual(
             model_control.options,
-            ["DeepSeek V4.1 Flash · High", "DeepSeek V4 Flash · 非思考"],
+            ["DeepSeek V4.1 Flash · High", "DeepSeek V4.1 Flash · 非思考"],
         )
-        model_control.set_value("DeepSeek V4 Flash · 非思考").run()
-        self.assertEqual(model_control.value, "DeepSeek V4 Flash · 非思考")
+        model_control.set_value("DeepSeek V4.1 Flash · 非思考").run()
+        self.assertEqual(model_control.value, "DeepSeek V4.1 Flash · 非思考")
         self.assertEqual(list(app.exception), [])
 
     @unittest.skipIf(

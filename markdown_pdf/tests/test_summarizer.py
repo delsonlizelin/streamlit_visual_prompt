@@ -8,7 +8,6 @@ from urllib.error import HTTPError
 
 from summarizer.deepseek import (
     DEFAULT_MODEL,
-    FALLBACK_MODEL,
     MAX_CUSTOM_INSTRUCTION_CHARACTERS,
     MAX_SOURCE_CHARACTERS,
     SYSTEM_PROMPT,
@@ -324,51 +323,44 @@ class SummarizerTests(unittest.TestCase):
         self.assertEqual(result.prompt_tokens, 42)
         self.assertEqual(result.completion_tokens, 9)
 
-    def test_expired_v4_1_falls_back_to_non_thinking_v4_flash(self):
-        unavailable = HTTPError(
-            "https://api.deepseek.com/chat/completions",
-            400,
-            "bad request",
-            {},
-            BytesIO(b'{"error":{"message":"Model has expired and is unavailable"}}'),
-        )
-        payload = {
-            "model": FALLBACK_MODEL,
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps(SUMMARY_OBJECT, ensure_ascii=False)
-                    }
-                }
-            ],
-            "usage": {},
-        }
-        requests = []
+    def test_non_thinking_uses_same_model_without_reasoning_budget(self):
+        payload = {"choices": [{"message": {"content": json.dumps(SUMMARY_OBJECT)}}]}
+        with patch("summarizer.deepseek.urlopen", return_value=FakeResponse(payload)) as call:
+            result = summarize_markdown("原文", mode="standard", language="zh",
+                                        api_key="test-key", thinking=False)
+        body = json.loads(call.call_args.args[0].data)
+        self.assertEqual(body["model"], DEFAULT_MODEL)
+        self.assertEqual(body["thinking"], {"type": "disabled"})
+        self.assertNotIn("reasoning_effort", body)
+        self.assertEqual(body["max_tokens"], 1800)
+        self.assertEqual(result.model, DEFAULT_MODEL)
 
-        def fake_urlopen(request, timeout):
-            requests.append(request)
-            if len(requests) == 1:
-                raise unavailable
-            return FakeResponse(payload)
+    def test_thinking_changes_request_identity(self):
+        args = dict(mode="standard", language="zh")
+        self.assertNotEqual(build_request_fingerprint("原文", thinking=True, **args),
+                            build_request_fingerprint("原文", thinking=False, **args))
 
-        with patch("summarizer.deepseek.urlopen", side_effect=fake_urlopen):
-            result = summarize_markdown(
-                "# 原文\n\n正文。",
-                mode="standard",
-                language="zh",
-                api_key="test-key",
-            )
+    def test_malformed_envelopes_report_summary_error(self):
+        for payload in ([], {}, {"choices": [None]}, {"choices": [{"message": []}]}):
+            with self.subTest(payload=payload), patch(
+                "summarizer.deepseek.urlopen", return_value=FakeResponse(payload)
+            ), patch("summarizer.deepseek.time.sleep"):
+                with self.assertRaises(SummaryError):
+                    summarize_markdown("原文", mode="standard", language="zh", api_key="test")
 
-        preview_body = json.loads(requests[0].data.decode("utf-8"))
-        fallback_body = json.loads(requests[1].data.decode("utf-8"))
-        self.assertEqual(preview_body["model"], DEFAULT_MODEL)
-        self.assertEqual(preview_body["reasoning_effort"], "high")
-        self.assertEqual(fallback_body["model"], FALLBACK_MODEL)
-        self.assertEqual(fallback_body["thinking"], {"type": "disabled"})
-        self.assertNotIn("reasoning_effort", fallback_body)
-        self.assertEqual(fallback_body["max_tokens"], 1_800)
-        self.assertEqual(fallback_body["temperature"], 0.2)
-        self.assertEqual(result.model, FALLBACK_MODEL)
+    def test_content_filter_does_not_retry(self):
+        payload = {"choices": [{"finish_reason": "content_filter", "message": {"content": None}}]}
+        with patch("summarizer.deepseek.urlopen", return_value=FakeResponse(payload)) as call:
+            with self.assertRaisesRegex(SummaryError, "内容过滤"):
+                summarize_markdown("原文", mode="standard", language="zh", api_key="test")
+        self.assertEqual(call.call_count, 1)
+
+    def test_reasoning_is_never_parsed_as_the_summary(self):
+        payload = {"choices": [{"message": {
+            "content": json.dumps(SUMMARY_OBJECT), "reasoning_content": "not JSON"}}]}
+        with patch("summarizer.deepseek.urlopen", return_value=FakeResponse(payload)):
+            result = summarize_markdown("原文", mode="standard", language="zh", api_key="test")
+        self.assertEqual(result.document.title, SUMMARY_OBJECT["title"])
 
     def test_revision_request_sends_current_draft_and_quality_feedback(self):
         captured = {}

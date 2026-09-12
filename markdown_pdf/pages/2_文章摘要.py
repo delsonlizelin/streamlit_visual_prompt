@@ -345,9 +345,7 @@ if "summary_output_name" not in st.session_state:
     st.session_state.summary_output_name = "summary"
 
 api_key = secret_value("DEEPSEEK_API_KEY")
-configured_model = secret_value("DEEPSEEK_MODEL", DEFAULT_MODEL)
-if configured_model == "deepseek-v4-flash":
-    configured_model = DEFAULT_MODEL
+model = DEFAULT_MODEL
 base_url = secret_value("DEEPSEEK_BASE_URL", DEFAULT_BASE_URL)
 
 st.title("把长文，变成一张读得完的图")
@@ -371,11 +369,16 @@ language_options = {
     "English": "en",
 }
 model_options = {
-    "DeepSeek V4.1 Flash · High": "deepseek-v4.1-flash-expires-on-0910",
-    "DeepSeek V4 Flash · 非思考": "deepseek-v4-flash",
+    "DeepSeek V4.1 Flash · High": True,
+    "DeepSeek V4.1 Flash · 非思考": False,
 }
-if configured_model not in model_options.values():
-    model_options[f"当前配置 · {configured_model}"] = configured_model
+# Migrate live sessions without carrying an expired model or removed Pro option.
+old_label = st.session_state.get("summary_model_label")
+if old_label not in model_options:
+    st.session_state.summary_model_label = (
+        "DeepSeek V4.1 Flash · 非思考" if old_label and "非思考" in old_label
+        else "DeepSeek V4.1 Flash · High"
+    )
 
 workspace_col, proof_col = st.columns([0.86, 1.14], gap="large")
 with workspace_col:
@@ -437,7 +440,7 @@ with workspace_col:
         disabled=not api_key,
     )
     st.caption("点击后发送当前原文与方案到 DeepSeek。")
-    configured_model_index = list(model_options.values()).index(configured_model)
+    configured_model_index = 0
     collapsed_language = str(st.session_state.get("summary_language_label", "跟随原文"))
     collapsed_model = str(
         st.session_state.get("summary_model_label", list(model_options)[configured_model_index])
@@ -468,11 +471,10 @@ with workspace_col:
                 index=configured_model_index,
                 key="summary_model_label",
                 help=(
-                    "V4.1 Flash 是截至 9 月 10 日的限时内测模型；"
-                    "V4 Flash 使用非思考模式，也会在 V4.1 下线后自动接管。"
+                    "High 启用深度思考；非思考模式响应更快。两种模式均使用 V4.1 Flash。"
                 ),
             )
-        model = model_options[model_label]
+        thinking = model_options[model_label]
         st.text_input("下载文件名", key="summary_output_name")
         clipboard_button(
             build_prompt_template(
@@ -495,6 +497,7 @@ with workspace_col:
         length=selected_length,
         custom_instructions=custom_instructions,
         model=model,
+        thinking=thinking,
     )
     request_is_stale = bool(
         result
@@ -519,6 +522,7 @@ if generate_clicked:
                     custom_instructions=custom_instructions,
                     api_key=api_key,
                     model=model,
+                    thinking=thinking,
                     base_url=base_url,
                 )
                 store_model_summary_result(
@@ -611,6 +615,7 @@ with proof_col:
                             custom_instructions=custom_instructions,
                             api_key=api_key,
                             model=model,
+                            thinking=thinking,
                             base_url=base_url,
                         )
                         store_model_summary_result(
