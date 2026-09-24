@@ -99,11 +99,11 @@ class StreamlitEntrypointTests(unittest.TestCase):
         mode_control = next(
             control
             for control in app.get("button_group")
-            if control.label == "内容结构"
+            if control.label == "摘要方式"
         )
         self.assertEqual(
             mode_control.options,
-            ["核心摘要（推荐）", "按章节梳理"],
+            ["先看结论（推荐）", "按章节梳理"],
         )
         style_control = next(
             control
@@ -176,6 +176,8 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertIn("supplement_numeric_highlights=False", source)
         self.assertIn("lint_summary_document", source)
         self.assertIn('"按检查结果修订"', source)
+        self.assertIn('"按我的要求修订"', source)
+        self.assertIn('"读取这篇文章"', source)
         self.assertIn("revise_summary_with_feedback", source)
         self.assertIn("当前原文、摘要和上述反馈发送到 DeepSeek", source)
         self.assertLess(source.index('"按检查结果修订"'), source.index('with st.expander("手动编辑摘要'))

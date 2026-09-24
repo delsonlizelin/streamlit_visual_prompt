@@ -20,6 +20,7 @@ _ENUMERATOR_RE = re.compile(
     r"(?:第[一二三四五六七八九十]+|[一二三四五六七八九十]+是|"
     r"(?:首先|其次|再次|最后))"
 )
+_PDF_PAGE_MARKER_RE = re.compile(r"(?m)^\[第[ \t]*\d+[ \t]*页\][ \t]*$")
 
 
 @dataclass(frozen=True)
@@ -137,6 +138,20 @@ def lint_summary_document(
             )
         )
 
+    if document.lead and all_items:
+        lead_text = _similarity_text(document.lead)
+        first_item_text = _similarity_text(all_items[0][2])
+        if len(lead_text) >= 12 and SequenceMatcher(None, lead_text, first_item_text).ratio() >= 0.88:
+            issues.append(
+                SummaryQualityIssue(
+                    severity="warning",
+                    code="lead-duplicate",
+                    message="导语与第一条要点高度相似，请让导语概括全文判断，或删去重复的导语。",
+                    section=1,
+                    item=1,
+                )
+            )
+
     for index, (section_index, item_index, text) in enumerate(all_items):
         left = _similarity_text(text)
         if len(left) < 18:
@@ -169,7 +184,10 @@ def lint_summary_document(
         )
 
     if source_text:
-        source_numbers = set(extract_numeric_tokens(source_text))
+        # PDF extraction inserts navigation markers; they are not source facts.
+        source_numbers = set(
+            extract_numeric_tokens(_PDF_PAGE_MARKER_RE.sub("", source_text))
+        )
         summary_numbers = set(
             extract_numeric_tokens(
                 "\n".join(

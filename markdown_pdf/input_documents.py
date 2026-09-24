@@ -23,6 +23,7 @@ class ExtractedDocument:
     stem: str
     kind: str
     pages: int
+    text_pages: int = 0
 
 
 def filename_stem(filename: str, fallback: str) -> str:
@@ -40,7 +41,7 @@ def _decode_text(data: bytes) -> str:
     return re.sub(r"\n{4,}", "\n\n\n", text).strip()
 
 
-def _extract_pdf(data: bytes, stem: str) -> tuple[str, int]:
+def _extract_pdf(data: bytes, stem: str) -> tuple[str, int, int]:
     try:
         reader = PdfReader(BytesIO(data), strict=False)
     except (PdfReadError, ValueError, TypeError) as error:
@@ -77,22 +78,34 @@ def _extract_pdf(data: bytes, stem: str) -> tuple[str, int]:
 
     if not extracted_pages:
         raise InputDocumentError("PDF 中没有可提取文字；扫描版或图片型 PDF 请先进行 OCR。")
-    return f"# {stem}\n\n" + "\n\n---\n\n".join(extracted_pages), page_count
+    return (
+        f"# {stem}\n\n" + "\n\n---\n\n".join(extracted_pages),
+        page_count,
+        len(extracted_pages),
+    )
 
 
 def extract_uploaded_document(filename: str, data: bytes) -> ExtractedDocument:
     suffix = Path(filename).suffix.lower()
     stem = filename_stem(filename, "document")
     if suffix == ".pdf":
-        text, pages = _extract_pdf(data, stem)
+        text, pages, text_pages = _extract_pdf(data, stem)
         kind = "PDF"
     elif suffix in {".md", ".markdown", ".txt"}:
         text = _decode_text(data)
         pages = 0
+        text_pages = 0
         kind = "Markdown" if suffix in {".md", ".markdown"} else "TXT"
     else:
         raise InputDocumentError("仅支持 Markdown、TXT 和 PDF 文件。")
 
     if not text.strip():
         raise InputDocumentError("文件中没有可用文字。")
-    return ExtractedDocument(text=text, filename=filename, stem=stem, kind=kind, pages=pages)
+    return ExtractedDocument(
+        text=text,
+        filename=filename,
+        stem=stem,
+        kind=kind,
+        pages=pages,
+        text_pages=text_pages,
+    )

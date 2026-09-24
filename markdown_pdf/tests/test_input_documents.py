@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from input_documents import InputDocumentError, extract_uploaded_document, filename_stem
 
@@ -20,6 +22,19 @@ class InputDocumentTests(unittest.TestCase):
         document = extract_uploaded_document("transcript.txt", "第一段。".encode("utf-8"))
         self.assertEqual(document.kind, "TXT")
         self.assertEqual(document.text, "第一段。")
+
+    def test_pdf_reports_pages_without_extracted_text(self):
+        pages = [
+            SimpleNamespace(extract_text=lambda **kwargs: "第一段正文。"),
+            SimpleNamespace(extract_text=lambda **kwargs: ""),
+        ]
+        reader = SimpleNamespace(is_encrypted=False, pages=pages)
+        with patch("input_documents.PdfReader", return_value=reader):
+            document = extract_uploaded_document("report.pdf", b"pdf bytes")
+
+        self.assertEqual(document.pages, 2)
+        self.assertEqual(document.text_pages, 1)
+        self.assertIn("[第 1 页]", document.text)
 
     def test_invalid_utf8_is_rejected(self):
         with self.assertRaisesRegex(InputDocumentError, "不是 UTF-8"):

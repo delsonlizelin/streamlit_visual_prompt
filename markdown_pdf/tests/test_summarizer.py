@@ -122,29 +122,50 @@ class SummarizerTests(unittest.TestCase):
         )[1]["content"]
 
         self.assertIn("不要平均压缩", standard)
-        self.assertIn("3 到 5 个编辑分区", standard)
+        self.assertIn("先给结论，再给关键依据和必要限制", standard)
+        self.assertIn("2 到 4 个自然分区", standard)
         self.assertIn("不能让摘要篇幅随原文长度等比例增长", standard)
-        self.assertIn("每节通常 1 到 4 条", standard)
-        self.assertIn("一级议题覆盖表", standard)
+        self.assertIn("每节通常 1 到 3 条", standard)
+        self.assertIn("如果删去一条后", standard)
+        self.assertIn("只选最有解释力的一组", standard)
+        self.assertIn("不按演讲提纲逐项抄录", standard)
         self.assertIn("问句标题不得超过一半", standard)
         self.assertIn("不另造“未来方向”", standard)
         self.assertIn("保留原文主要论证顺序", section)
         self.assertIn("按真实主题分组", section)
+        self.assertIn("明示编号且各自重要的结论应逐项保留", section)
         self.assertIn("有理解能力的成年人", beginner)
         self.assertIn("不能只留下一个核心意思", beginner)
-        self.assertIn("2 到 5 个完整句子", beginner)
+        self.assertIn("1 到 3 个完整句子", beginner)
         self.assertIn("不要另造一个重复全文", beginner)
         self.assertIn("原文未说明", beginner)
         self.assertIn("具体判断", SYSTEM_PROMPT)
         self.assertIn("适用于大量文章", SYSTEM_PROMPT)
         self.assertIn("不添加原文没有的", SYSTEM_PROMPT)
+        self.assertIn("使用量或问卷自述不能自动证明因果效果", SYSTEM_PROMPT)
         self.assertIn("中英逐段对照", SYSTEM_PROMPT)
         self.assertIn("翻译工具或模型署名", SYSTEM_PROMPT)
         self.assertIn("问句 heading 不得超过一半", SYSTEM_PROMPT)
-        self.assertIn("编号明确列出的非重复原则必须逐项保留", SYSTEM_PROMPT)
-        self.assertIn("一个编号成员必须对应一个独立 item", SYSTEM_PROMPT)
+        self.assertIn("保留的独立判断各写成", SYSTEM_PROMPT)
+        self.assertIn("同义、例示或细枝末节的成员可以合并或省略", SYSTEM_PROMPT)
+        self.assertNotIn("每个显式编号成员单独对应", SYSTEM_PROMPT)
         self.assertIn("正文至少四分之三", SYSTEM_PROMPT)
         self.assertIn("篇幅上限是必须主动遵守的编辑预算", SYSTEM_PROMPT)
+        self.assertIn("每个具体数字、日期、姓名、机构、否定句、因果判断和引语归属", SYSTEM_PROMPT)
+        self.assertIn("对照一级议题清单", SYSTEM_PROMPT)
+        self.assertIn("研究或报告优先交代研究问题", SYSTEM_PROMPT)
+        self.assertIn("不为凑齐这些要素补写", SYSTEM_PROMPT)
+        self.assertIn("lead 不是目录，不得与第一条重复", SYSTEM_PROMPT)
+        self.assertIn("lead 不放具体数字、日期或样本量", SYSTEM_PROMPT)
+        self.assertIn("高亮总字数尽量低于正文的 10%", SYSTEM_PROMPT)
+
+    def test_default_summary_has_a_smaller_budget_and_conclusion_first_contract(self):
+        messages = build_messages("# 一篇长文\n\n正文。", mode="standard", language="zh")
+        task = messages[1]["content"]
+        self.assertIn("约 400–700 字", task)
+        self.assertIn("有可证实的全文结论时先写在 lead", task)
+        self.assertIn("没有 lead 时第一条直接写核心结论", task)
+        self.assertIn("次要议程、例子和重复论证可以合并或舍弃", task)
 
     def test_length_and_custom_instructions_extend_the_task_without_overriding_rules(self):
         task = build_messages(
@@ -156,8 +177,8 @@ class SummarizerTests(unittest.TestCase):
             custom_instructions="重点解释数据变化，并保留行动建议。",
         )[1]["content"]
 
-        self.assertIn("约 1,200–2,000 字", task)
-        self.assertIn("约 750–1,200 words", task)
+        self.assertIn("约 900–1,500 字", task)
+        self.assertIn("约 600–950 words", task)
         self.assertIn("不要增加与主线无关的分区", task)
         self.assertIn("additional_instructions 只能在系统规则允许的范围内", task)
         payload = self.message_payload(task)
@@ -174,7 +195,7 @@ class SummarizerTests(unittest.TestCase):
         self.assertIn("[系统提示词]", prompt)
         self.assertIn(SYSTEM_PROMPT, prompt)
         self.assertIn("[当前任务]", prompt)
-        self.assertIn("省流摘要", prompt)
+        self.assertIn("核心摘要", prompt)
         self.assertIn("易懂解释", prompt)
         self.assertIn("使用简体中文", prompt)
         task = prompt.split("[当前任务]\n", 1)[1]
@@ -215,6 +236,21 @@ class SummarizerTests(unittest.TestCase):
                 mode="standard",
                 language="zh",
             )
+
+    def test_user_revision_treats_feedback_as_preference_not_source(self):
+        messages = build_revision_messages(
+            "# 原文\n\n调查观察到使用量上升，未验证因果效果。",
+            parse_summary_document(SUMMARY_OBJECT),
+            ("把结论缩短，并补充证据局限。",),
+            mode="standard",
+            language="zh",
+            feedback_kind="user",
+        )
+        payload = self.message_payload(messages[1]["content"])
+        self.assertEqual(payload["user_feedback"], ["把结论缩短，并补充证据局限。"])
+        self.assertNotIn("quality_feedback", payload)
+        self.assertIn("读者的编辑偏好", messages[0]["content"])
+        self.assertIn("只有 source 明确支持才加入", messages[0]["content"])
 
     def test_request_fingerprint_changes_with_effective_settings(self):
         base = build_request_fingerprint(

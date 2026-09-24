@@ -40,9 +40,29 @@ class SummaryQualityTests(unittest.TestCase):
         report = lint_summary_document(document)
         self.assertIn("duplicate-item", {issue.code for issue in report.issues})
 
+    def test_repeated_lead_and_first_item_are_reported(self):
+        document = SummaryDocument(
+            title="测试主题",
+            byline=None,
+            lead="项目只支持有限范围的试点，不承诺全面部署。",
+            sections=(
+                SummarySection(
+                    "实施范围",
+                    (SummaryItem("项目只支持有限范围的试点，不承诺全面部署。"),),
+                ),
+            ),
+        )
+        report = lint_summary_document(document)
+        self.assertIn("lead-duplicate", {issue.code for issue in report.issues})
+
     def test_unsupported_summary_number_is_reported(self):
         document = document_with("目标将在 2028 年降至 2%。")
         report = lint_summary_document(document, "原文只说目标会逐步下降到 2%。")
+        self.assertIn("unsupported-number", {issue.code for issue in report.issues})
+
+    def test_pdf_page_markers_do_not_support_summary_numbers(self):
+        document = document_with("政策分为 3 类。")
+        report = lint_summary_document(document, "[第 3 页]\n\n原文只说政策有几类。")
         self.assertIn("unsupported-number", {issue.code for issue in report.issues})
 
     def test_number_normalization_accepts_commas_and_spacing(self):

@@ -19,6 +19,25 @@ class UrlDocumentError(RuntimeError):
     """A user-facing web-article extraction error."""
 
 
+def looks_like_article_url(value: str) -> bool:
+    """Recognize a pasted URL without treating prose containing links as one."""
+    cleaned = value.strip()
+    if not cleaned or re.search(r"\s", cleaned):
+        return False
+    candidate = cleaned if "://" in cleaned else f"https://{cleaned}"
+    try:
+        parsed = urlsplit(candidate)
+        return bool(
+            parsed.scheme.lower() in {"http", "https"}
+            and parsed.hostname
+            and "." in parsed.hostname
+            and not parsed.username
+            and not parsed.password
+        )
+    except ValueError:
+        return False
+
+
 def _read_bounded_response(response, *, max_bytes: int = MAX_URL_BYTES) -> bytes:  # noqa: ANN001
     """Read one byte past the limit so oversized responses fail without growing forever."""
     payload = response.read(max_bytes + 1)

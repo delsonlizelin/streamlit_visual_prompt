@@ -8,6 +8,7 @@ from url_documents import (
     UrlDocumentError,
     _read_bounded_response,
     extract_article_html,
+    looks_like_article_url,
     normalize_public_url,
 )
 
@@ -17,6 +18,13 @@ def public_resolver(_hostname: str) -> list[str]:
 
 
 class UrlDocumentTests(unittest.TestCase):
+    def test_only_a_standalone_url_is_treated_as_a_pasted_link(self):
+        self.assertTrue(looks_like_article_url("https://example.com/story?x=1"))
+        self.assertTrue(looks_like_article_url("mp.weixin.qq.com/s/example"))
+        self.assertFalse(looks_like_article_url("这篇文章见 https://example.com/story"))
+        self.assertFalse(looks_like_article_url("# 标题\nhttps://example.com/story"))
+        self.assertFalse(looks_like_article_url("file:///tmp/story"))
+
     def test_url_response_limit_is_large_but_still_bounded(self):
         self.assertEqual(MAX_URL_BYTES, 25 * 1024 * 1024)
         self.assertEqual(_read_bounded_response(BytesIO(b"x" * 10), max_bytes=10), b"x" * 10)

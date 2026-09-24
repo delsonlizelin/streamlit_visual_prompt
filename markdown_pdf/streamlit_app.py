@@ -65,6 +65,12 @@ if "markdown_source" not in st.session_state:
 if "pdf_output_name" not in st.session_state:
     st.session_state.pdf_output_name = "longread"
 
+mode_options = {
+    "电脑端 · A4": "desktop",
+    "平板端 · iPad mini": "tablet",
+    "手机端 · 9:16": "mobile",
+}
+
 st.title("Markdown PDF")
 st.markdown(
     '<p class="intro">把 Markdown 排成安静、耐读的长文 PDF。无需账号和 API，文稿只在当前会话中处理。</p>',
@@ -72,11 +78,24 @@ st.markdown(
 )
 
 result = st.session_state.get("render_result")
+source_digest = hashlib.sha256(st.session_state.markdown_source.encode("utf-8")).hexdigest()
+selected_mode = mode_options.get(st.session_state.get("pdf_mode_label"), "desktop")
+source_changed = bool(result and st.session_state.get("render_source_digest") != source_digest)
+mode_changed = bool(result and result.mode != selected_mode)
+result_is_stale = source_changed or mode_changed
 if result:
-    st.success("PDF 已生成，可以直接下载。", icon=":material/check_circle:")
+    if result_is_stale:
+        reasons = []
+        if source_changed:
+            reasons.append("原文已修改")
+        if mode_changed:
+            reasons.append("阅读方式已切换")
+        st.info(f"当前显示上一版 PDF（{'、'.join(reasons)}）。重新生成后再下载新版。")
+    else:
+        st.success("PDF 已生成，可以直接下载。", icon=":material/check_circle:")
     filename = f"{safe_filename(st.session_state.pdf_output_name)}.pdf"
     st.download_button(
-        "下载 PDF",
+        "下载上一版 PDF" if result_is_stale else "下载 PDF",
         data=result.pdf,
         file_name=filename,
         mime="application/pdf",
@@ -96,10 +115,6 @@ if result:
         st.warning("自动检查发现潜在版式问题，建议下载后复核。")
     with st.expander("预览 PDF", icon=":material/preview:"):
         st.pdf(result.pdf, height=760)
-
-source_digest = hashlib.sha256(st.session_state.markdown_source.encode("utf-8")).hexdigest()
-if result and st.session_state.get("render_source_digest") != source_digest:
-    st.info("原文已经修改；上方下载仍是上一次生成的版本。请重新生成以更新 PDF。")
 
 input_panel = (
     st.expander("编辑原文或重新生成", icon=":material/edit:")
@@ -121,7 +136,14 @@ with input_panel:
     if uploaded is not None:
         payload = uploaded.getvalue()
         digest = hashlib.sha256(payload).hexdigest()
-        if st.session_state.get("uploaded_digest") != digest:
+        reread = False
+        if st.session_state.get("uploaded_digest") == digest:
+            reread = st.button(
+                "重新读取这个文件",
+                icon=":material/refresh:",
+                help="丢弃编辑器中的改动，恢复当前上传文件的内容。",
+            )
+        if st.session_state.get("uploaded_digest") != digest or reread:
             try:
                 document = extract_uploaded_document(uploaded.name, payload)
                 st.session_state.markdown_source = document.text
@@ -144,11 +166,6 @@ with input_panel:
 
     with settings:
         st.subheader("阅读方式")
-        mode_options = {
-            "电脑端 · A4": "desktop",
-            "平板端 · iPad mini": "tablet",
-            "手机端 · 9:16": "mobile",
-        }
         mode_label = st.radio(
             "输出模式",
             list(mode_options),
