@@ -9,6 +9,7 @@ import streamlit
 from streamlit.testing.v1 import AppTest
 
 from summarizer import deepseek as summarizer_backend
+import url_documents as url_documents_backend
 
 
 APP_ROOT = Path(__file__).resolve().parent.parent
@@ -59,8 +60,10 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertEqual(list(app.exception), [])
         self.assertTrue(hasattr(stale_backend, "STYLE_LABELS"))
 
-    def test_summary_page_reloads_stale_url_documents_backend(self) -> None:
+    def test_summary_page_accepts_url_backend_without_paste_helper(self) -> None:
         stale_backend = ModuleType("url_documents")
+        stale_backend.UrlDocumentError = url_documents_backend.UrlDocumentError
+        stale_backend.fetch_url_document = url_documents_backend.fetch_url_document
         with patch.dict("sys.modules", {"url_documents": stale_backend}):
             app = AppTest.from_file(
                 APP_ROOT / "pages" / "2_文章摘要.py",
@@ -68,7 +71,16 @@ class StreamlitEntrypointTests(unittest.TestCase):
             ).run()
 
         self.assertEqual(list(app.exception), [])
-        self.assertTrue(hasattr(stale_backend, "looks_like_article_url"))
+        self.assertFalse(hasattr(stale_backend, "looks_like_article_url"))
+
+    def test_summary_page_prompts_to_read_a_pasted_url(self) -> None:
+        app = AppTest.from_file(APP_ROOT / "pages" / "2_文章摘要.py", default_timeout=10).run()
+        source_input = next(area for area in app.text_area if area.label == "原文（可编辑）")
+        source_input.set_value("https://example.com/story").run()
+        self.assertIn("读取这篇文章", [button.label for button in app.button])
+        source_input = next(area for area in app.text_area if area.label == "原文（可编辑）")
+        source_input.set_value("正文提到了 https://example.com/story").run()
+        self.assertNotIn("读取这篇文章", [button.label for button in app.button])
 
     def test_old_non_thinking_session_keeps_its_mode(self) -> None:
         app = AppTest.from_file(APP_ROOT / "pages" / "2_文章摘要.py", default_timeout=10)

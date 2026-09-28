@@ -1,3 +1,4 @@
+# App-local pins; updates to this file request a full Streamlit Cloud rebuild.
 streamlit[pdf]==1.60.0
 playwright==1.62.0
 Markdown==3.10.2

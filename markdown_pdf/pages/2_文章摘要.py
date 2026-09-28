@@ -5,6 +5,7 @@ import importlib
 import json
 import logging
 import re
+from urllib.parse import urlsplit
 
 import streamlit as st
 
@@ -18,13 +19,12 @@ from ui_components import clipboard_button, page_navigation
 LOGGER = logging.getLogger(__name__)
 
 
-URL_DOCUMENT_SYMBOLS = ("UrlDocumentError", "fetch_url_document", "looks_like_article_url")
+URL_DOCUMENT_SYMBOLS = ("UrlDocumentError", "fetch_url_document")
 url_documents_backend = importlib.import_module("url_documents")
 if not all(hasattr(url_documents_backend, name) for name in URL_DOCUMENT_SYMBOLS):
     url_documents_backend = importlib.reload(url_documents_backend)
 UrlDocumentError = url_documents_backend.UrlDocumentError
 fetch_url_document = url_documents_backend.fetch_url_document
-looks_like_article_url = url_documents_backend.looks_like_article_url
 
 
 SUMMARIZER_SYMBOLS = (
@@ -71,6 +71,25 @@ build_request_fingerprint = summarizer_backend.build_request_fingerprint
 parse_summary_document = summarizer_backend.parse_summary_document
 revise_summary_with_feedback = summarizer_backend.revise_summary_with_feedback
 summarize_markdown = summarizer_backend.summarize_markdown
+
+
+def looks_like_article_url(value: str) -> bool:
+    """Recognize a URL pasted by itself without treating prose as a link."""
+    cleaned = value.strip()
+    if not cleaned or re.search(r"\s", cleaned):
+        return False
+    candidate = cleaned if "://" in cleaned else f"https://{cleaned}"
+    try:
+        parsed = urlsplit(candidate)
+        return bool(
+            parsed.scheme.lower() in {"http", "https"}
+            and parsed.hostname
+            and "." in parsed.hostname
+            and not parsed.username
+            and not parsed.password
+        )
+    except ValueError:
+        return False
 
 
 def safe_filename(value: str) -> str:
