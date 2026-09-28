@@ -13,10 +13,18 @@ from input_documents import InputDocumentError, extract_uploaded_document
 from longread_pdf import RenderError, render_summary_long_image
 from summarizer.quality import lint_summary_document
 from ui_components import clipboard_button, page_navigation
-from url_documents import UrlDocumentError, fetch_url_document, looks_like_article_url
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+URL_DOCUMENT_SYMBOLS = ("UrlDocumentError", "fetch_url_document", "looks_like_article_url")
+url_documents_backend = importlib.import_module("url_documents")
+if not all(hasattr(url_documents_backend, name) for name in URL_DOCUMENT_SYMBOLS):
+    url_documents_backend = importlib.reload(url_documents_backend)
+UrlDocumentError = url_documents_backend.UrlDocumentError
+fetch_url_document = url_documents_backend.fetch_url_document
+looks_like_article_url = url_documents_backend.looks_like_article_url
 
 
 SUMMARIZER_SYMBOLS = (
@@ -398,15 +406,15 @@ language_options = {
     "English": "en",
 }
 model_options = {
-    "DeepSeek V4.1 Flash · High": True,
     "DeepSeek V4.1 Flash · 非思考": False,
+    "DeepSeek V4.1 Flash · High": True,
 }
 # Migrate live sessions without carrying an expired model or removed Pro option.
 old_label = st.session_state.get("summary_model_label")
 if old_label not in model_options:
     st.session_state.summary_model_label = (
-        "DeepSeek V4.1 Flash · 非思考" if old_label and "非思考" in old_label
-        else "DeepSeek V4.1 Flash · High"
+        "DeepSeek V4.1 Flash · High" if old_label and "High" in old_label
+        else "DeepSeek V4.1 Flash · 非思考"
     )
 
 workspace_col, proof_col = st.columns([0.86, 1.14], gap="large")

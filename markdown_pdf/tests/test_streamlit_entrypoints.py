@@ -59,6 +59,17 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertEqual(list(app.exception), [])
         self.assertTrue(hasattr(stale_backend, "STYLE_LABELS"))
 
+    def test_summary_page_reloads_stale_url_documents_backend(self) -> None:
+        stale_backend = ModuleType("url_documents")
+        with patch.dict("sys.modules", {"url_documents": stale_backend}):
+            app = AppTest.from_file(
+                APP_ROOT / "pages" / "2_文章摘要.py",
+                default_timeout=10,
+            ).run()
+
+        self.assertEqual(list(app.exception), [])
+        self.assertTrue(hasattr(stale_backend, "looks_like_article_url"))
+
     def test_old_non_thinking_session_keeps_its_mode(self) -> None:
         app = AppTest.from_file(APP_ROOT / "pages" / "2_文章摘要.py", default_timeout=10)
         app.session_state["summary_model_label"] = "DeepSeek V4 Flash · 非思考"
@@ -85,7 +96,7 @@ class StreamlitEntrypointTests(unittest.TestCase):
         model_control = next(
             selectbox for selectbox in app.selectbox if selectbox.label == "摘要模型"
         )
-        self.assertEqual(model_control.value, "DeepSeek V4.1 Flash · High")
+        self.assertEqual(model_control.value, "DeepSeek V4.1 Flash · 非思考")
 
     @unittest.skipIf(
         STREAMLIT_VERSION < (1, 60),
@@ -126,10 +137,11 @@ class StreamlitEntrypointTests(unittest.TestCase):
         )
         self.assertEqual(
             model_control.options,
-            ["DeepSeek V4.1 Flash · High", "DeepSeek V4.1 Flash · 非思考"],
+            ["DeepSeek V4.1 Flash · 非思考", "DeepSeek V4.1 Flash · High"],
         )
-        model_control.set_value("DeepSeek V4.1 Flash · 非思考").run()
         self.assertEqual(model_control.value, "DeepSeek V4.1 Flash · 非思考")
+        model_control.set_value("DeepSeek V4.1 Flash · High").run()
+        self.assertEqual(model_control.value, "DeepSeek V4.1 Flash · High")
         self.assertEqual(list(app.exception), [])
 
     @unittest.skipIf(
