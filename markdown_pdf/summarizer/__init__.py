@@ -1,6 +1,8 @@
 """Small DeepSeek-backed Markdown summarizer."""
 
 from .deepseek import (
+    budget_feedback,
+    summary_size,
     ALLOWED_MODELS,
     GENERATION_CAPTIONS,
     GENERATION_LABELS,
@@ -47,6 +49,8 @@ from .quality import (
 )
 
 __all__ = [
+    "budget_feedback",
+    "summary_size",
     "ALLOWED_MODELS",
     "GENERATION_CAPTIONS",
     "GENERATION_LABELS",

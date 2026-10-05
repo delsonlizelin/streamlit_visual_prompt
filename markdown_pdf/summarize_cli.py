@@ -6,7 +6,7 @@ summary; runs the local quality lint (optionally one revision pass and an
 attribution check); and writes JSON, Markdown, PDF and/or a long PNG.
 
     python summarize_cli.py https://youtu.be/VIDEO_ID --mode story
-    python summarize_cli.py article.md --formats md,pdf
+    python summarize_cli.py article.md --formats md
 """
 
 from __future__ import annotations
@@ -29,10 +29,10 @@ from sources import (  # noqa: E402
     load_upload,
     load_url,
     material_task_config,
+    suggest_mode,
     suggested_language,
 )
 from summarizer import (  # noqa: E402
-    SummaryDocument,
     SummaryError,
     lint_summary_document,
     resolve_generation,
@@ -40,7 +40,7 @@ from summarizer import (  # noqa: E402
     summarize_markdown,
 )
 
-FORMATS = ("json", "md", "pdf", "png")
+FORMATS = ("md", "png", "json")
 
 
 def read_source(value: str, settings) -> SourceDocument:  # noqa: ANN001
@@ -54,23 +54,6 @@ def read_source(value: str, settings) -> SourceDocument:  # noqa: ANN001
         )
     path = Path(value).expanduser()
     return load_upload(path.name, path.read_bytes())
-
-
-def to_markdown(document: SummaryDocument) -> str:
-    lines = [f"# {document.title}", ""]
-    if document.byline:
-        lines += [f"*{document.byline}*", ""]
-    if document.lead:
-        lines += [f"> {document.lead}", ""]
-    for section in document.sections:
-        lines += [f"## {section.heading}", ""]
-        for item in section.items:
-            text = item.text
-            for phrase in item.highlights:
-                text = text.replace(phrase, f"**{phrase}**", 1)
-            lines.append(f"- {text}")
-        lines.append("")
-    return "\n".join(lines)
 
 
 def progress_printer():  # noqa: ANN201
@@ -90,9 +73,9 @@ def main() -> int:
     parser.add_argument("source", help="file path, web/WeChat/YouTube URL, or '-' for stdin")
     parser.add_argument("-o", "--out", help="output directory (default: next to the source file, else cwd)")
     parser.add_argument("-n", "--name", help="output file stem (default: source title or file name)")
-    parser.add_argument("--mode", choices=("standard", "section", "story"), default="standard",
-                        help="standard = conclusion first; section = follow the source's structure; "
-                             "story = who/what/how it escalated/where it stands (events, disputes, videos)")
+    parser.add_argument("--mode", choices=("auto", "standard", "story", "howto", "section"), default="auto",
+                        help="auto = suggest from the material; standard 先看结论 (结论是什么); story 来龙去脉 "
+                             "(发生了什么); howto 上手步骤 (怎么做); section 逐章梳理 (每章讲什么)")
     parser.add_argument("--style", choices=("direct", "beginner"), default="direct")
     parser.add_argument("--length", choices=("normal", "detailed"), default="normal")
     parser.add_argument("--lang", choices=("auto", "source", "zh", "en"), default="auto",
@@ -109,9 +92,8 @@ def main() -> int:
                         help="if the local quality lint finds issues, run one targeted revision")
     parser.add_argument("--check-attribution", action="store_true",
                         help="run one revision that re-checks who said/accused what against the source")
-    parser.add_argument("--formats", default="md,pdf,png",
+    parser.add_argument("--formats", default="md,png",
                         help=f"comma-separated subset of {','.join(FORMATS)}")
-    parser.add_argument("--pdf-mode", choices=("desktop", "tablet", "mobile"), default="tablet")
     parser.add_argument("--image-mode", choices=("tablet", "mobile"), default="tablet")
     parser.add_argument("--save-source", action="store_true",
                         help="also write the loaded source text (e.g. a YouTube transcript) as <name>.source.md")
@@ -149,6 +131,9 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     language = suggested_language(material) if args.lang == "auto" else args.lang
+    if args.mode == "auto":
+        args.mode, reason = suggest_mode(source.text, material)
+        print(f"mode: {args.mode} (auto{': ' + reason if reason else ''})", file=sys.stderr)
     if args.effort == "auto":
         thinking, effort = resolve_generation(
             "auto", mode=args.mode, material_kind=material.kind, source_characters=len(source.text)
@@ -206,25 +191,19 @@ def main() -> int:
         written.append(target)
     if "md" in formats:
         target = out_dir / f"{stem}.summary.md"
-        target.write_text(to_markdown(document), "utf-8")
+        target.write_text(document.to_markdown(), "utf-8")
         written.append(target)
-    if "pdf" in formats or "png" in formats:
-        from longread_pdf import RenderError, render_summary_long_image, render_summary_pdf
+    if "png" in formats:
+        from longread_pdf import RenderError, render_summary_long_image
 
         try:
-            if "pdf" in formats:
-                rendered = render_summary_pdf(document, mode=args.pdf_mode)
-                target = out_dir / f"{stem}.summary.pdf"
-                target.write_bytes(rendered.pdf)
-                written.append(target)
-            if "png" in formats:
-                image = render_summary_long_image(document, mode=args.image_mode)
-                target = out_dir / f"{stem}.summary.png"
-                target.write_bytes(image.png)
-                written.append(target)
+            image = render_summary_long_image(document, mode=args.image_mode)
         except RenderError as error:
             print(f"render error: {error}", file=sys.stderr)
             return 1
+        target = out_dir / f"{stem}.summary.png"
+        target.write_bytes(image.png)
+        written.append(target)
 
     for path in written:
         print(path)

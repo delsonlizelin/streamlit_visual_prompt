@@ -95,8 +95,10 @@ def _similarity_text(value: str) -> str:
 
 
 def _looks_compound(value: str) -> bool:
-    colon_list = bool(re.search(r"[：:].+[；;].+", value))
-    enumerators = len(_ENUMERATOR_RE.findall(value)) >= 2
+    # A composed sentence with one semicolon is normal prose; a label followed by three or
+    # more semicolon-separated members is an unprocessed list.
+    colon_list = bool(re.search(r"[：:].+[；;].+[；;].+", value))
+    enumerators = len(_ENUMERATOR_RE.findall(value)) >= 3
     return colon_list or enumerators
 
 
@@ -138,7 +140,7 @@ def lint_summary_document(
             highlight_characters += sum(len(value) for value in item.highlights)
             cjk_count = len(re.findall(r"[\u3400-\u9fff]", item.text))
             word_count = len(re.findall(r"\b[\w'-]+\b", item.text))
-            if cjk_count > 120 or (cjk_count < 20 and word_count > 70):
+            if cjk_count > 160 or (cjk_count < 20 and word_count > 100):
                 issues.append(
                     SummaryQualityIssue(
                         severity="warning",

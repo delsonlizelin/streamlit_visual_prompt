@@ -10,7 +10,6 @@ from .renderer import (
     build_summary_document,
     render_markdown,
     render_summary_long_image,
-    render_summary_pdf,
 )
 
 __all__ = [
@@ -25,5 +24,4 @@ __all__ = [
     "preflight_markdown",
     "render_markdown",
     "render_summary_long_image",
-    "render_summary_pdf",
 ]

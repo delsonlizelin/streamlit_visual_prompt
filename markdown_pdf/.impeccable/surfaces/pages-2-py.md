@@ -19,7 +19,7 @@ related_targets: ["longread_pdf/assets/summary_template.html","longread_pdf/asse
 
 ## Chosen direction
 
-- Direction: policy-briefing workbench on cool uncoated paper. A compact source/settings rail supports a dominant proof surface. Graphite carries content; cinnabar marks only active state, section numerals, and conclusion-changing evidence.
+- Direction: policy-briefing workbench on cool uncoated paper for the app; the exported long image uses the Paper Atlas artifact theme (DESIGN.md). A compact source/settings rail supports a dominant proof surface. Graphite carries content; cinnabar marks only active state, section numerals, and conclusion-changing evidence.
 - Approved comp: `.impeccable/mocks/summary-workbench-b-approved.png`.
 - Memorable moment: the same numbered editorial sections visible in the model's structured output become the exported long image without layout guesswork.
 - Mobile: the rail becomes a single reading flow above the result; no persistent sidebar.

@@ -82,6 +82,17 @@ class StreamlitEntrypointTests(unittest.TestCase):
         source_input.set_value("正文提到了 https://example.com/story").run()
         self.assertNotIn("读取这个网址", [button.label for button in app.button])
 
+    def test_pasted_tutorial_gets_a_how_to_suggestion(self) -> None:
+        app = AppTest.from_file(APP_ROOT / "pages" / "2_文章摘要.py", default_timeout=10).run()
+        source_input = next(area for area in app.text_area if area.label == "原文（可编辑）")
+        tutorial = "# 安装教程\n\n" + "\n".join(
+            f"{index}. 打开设置，点击安装，然后输入命令运行。" for index in range(1, 9)
+        )
+        source_input.set_value(tutorial).run()
+        mode_control = next(c for c in app.get("button_group") if c.label == "摘要方式")
+        self.assertEqual(mode_control.value, "上手步骤")
+        self.assertEqual(list(app.exception), [])
+
     def test_old_session_and_expired_model_secret_still_load(self) -> None:
         app = AppTest.from_file(APP_ROOT / "pages" / "2_文章摘要.py", default_timeout=10)
         app.session_state["summary_model_label"] = "DeepSeek V4 Flash · 非思考"
@@ -132,7 +143,7 @@ class StreamlitEntrypointTests(unittest.TestCase):
         )
         self.assertEqual(
             mode_control.options,
-            ["先看结论", "来龙去脉", "按章节梳理"],
+            ["先看结论", "来龙去脉", "上手步骤", "逐章梳理"],
         )
         style_control = next(
             control
@@ -201,7 +212,8 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertIn("store_model_summary_result", source)
         self.assertIn("native_image_share", source)
         self.assertIn("长按保存", source)
-        self.assertNotIn('"下载 Markdown"', source)
+        self.assertIn('"下载 Markdown"', source)
+        self.assertIn("to_markdown()", source)
         self.assertNotIn('"发送到 Markdown PDF"', source)
         self.assertNotIn("build_summary_pdf", source)
 

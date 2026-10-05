@@ -4,8 +4,7 @@ import sys
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_DIR))
 
-from longread_pdf import render_summary_long_image, render_summary_pdf
-from input_documents import extract_uploaded_document
+from longread_pdf import render_summary_long_image
 
 
 SOURCE = """# 一份中英文摘要
@@ -26,28 +25,12 @@ if __name__ == "__main__":
     output_dir = PROJECT_DIR / ".smoke-output"
     output_dir.mkdir(exist_ok=True)
 
-    for mode in ("desktop", "tablet", "mobile"):
-        result = render_summary_pdf(SOURCE, mode=mode)
-        target = output_dir / f"summary.{mode}.pdf"
-        target.write_bytes(result.pdf)
-        print(
-            f"pdf {mode}: {result.pages} pages, "
-            f"{len(result.overflows)} overflows, {len(result.blank_pages)} blank pages -> {target}"
-        )
-        if result.overflows or result.blank_pages:
-            raise SystemExit(f"summary PDF {mode} failed layout QA")
-        if mode == "desktop":
-            extracted = extract_uploaded_document("generated-summary.pdf", result.pdf)
-            print(f"pdf input: {extracted.pages} pages, {len(extracted.text)} extracted characters")
-            if extracted.pages != 1 or len(extracted.text) < 80:
-                raise SystemExit("generated summary PDF failed text extraction QA")
-
     for mode in ("tablet", "mobile"):
         result = render_summary_long_image(SOURCE, mode=mode)
         target = output_dir / f"summary.{mode}.png"
         target.write_bytes(result.png)
         print(f"image {mode}: {result.width}×{result.height}px -> {target}")
-        expected_width = {"tablet": 1488, "mobile": 1227}[mode]
+        expected_width = {"tablet": 1488, "mobile": 1170}[mode]
         minimum_content_height = {"tablet": 900, "mobile": 900}[mode]
         if result.width != expected_width or result.height < minimum_content_height:
             raise SystemExit(f"summary image {mode} has unexpected dimensions")

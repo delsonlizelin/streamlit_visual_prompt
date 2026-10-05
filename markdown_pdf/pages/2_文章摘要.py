@@ -29,6 +29,7 @@ SOURCE_SYMBOLS = (
     "load_upload",
     "load_url",
     "material_task_config",
+    "suggest_mode",
     "suggested_language",
 )
 sources_backend = importlib.import_module("sources")
@@ -42,6 +43,7 @@ load_text = sources_backend.load_text
 load_upload = sources_backend.load_upload
 load_url = sources_backend.load_url
 material_task_config = sources_backend.material_task_config
+suggest_mode = sources_backend.suggest_mode
 suggested_language = sources_backend.suggested_language
 
 app_settings = importlib.import_module("app_settings")
@@ -187,6 +189,18 @@ def mark_language_manual() -> None:
     st.session_state.summary_language_manual = True
 
 
+def mark_mode_manual() -> None:
+    st.session_state.summary_mode_manual = True
+
+
+def apply_mode_suggestion(text: str, material: Material) -> None:
+    """Pre-select the mode that fits the material; never override the reader's own pick."""
+    mode, reason = suggest_mode(text, material)
+    st.session_state.summary_mode_suggestion = {"mode": mode, "reason": reason}
+    if not st.session_state.get("summary_mode_manual"):
+        st.session_state.summary_structure_choice = MODE_LABELS[mode]
+
+
 def use_source(document: SourceDocument, *, source: str) -> None:
     st.session_state.summary_markdown_source = document.text
     st.session_state.summary_output_name = safe_filename(document.output_name)
@@ -203,7 +217,10 @@ def use_source(document: SourceDocument, *, source: str) -> None:
         "digest": hashlib.sha256(document.text.encode("utf-8")).hexdigest(),
     }
     st.session_state.pop("summary_material_override", None)
+    # A new source gets a fresh suggestion; a manual pick only holds for the source it was made on.
+    st.session_state.pop("summary_mode_manual", None)
     apply_language_suggestion(document.material)
+    apply_mode_suggestion(document.text, document.material)
     clear_generated_content()
 
 
@@ -476,7 +493,7 @@ if not api_key:
     st.info("未配置 DeepSeek API Key；可编辑原文，但无法生成。")
 
 result = st.session_state.get("summary_result")
-mode_order = ["standard", "story", "section"]
+mode_order = ["standard", "story", "howto", "section"]
 mode_labels = [MODE_LABELS[mode] for mode in mode_order]
 if st.session_state.get("summary_structure_choice") not in (None, *mode_labels):
     st.session_state.summary_structure_choice = mode_labels[0]
@@ -536,6 +553,10 @@ with workspace_col:
         detected_material = Material(**loaded_meta["material"])
     else:
         detected_material = load_text(markdown_source).material
+        pasted_digest = hashlib.sha256(markdown_source.encode("utf-8")).hexdigest()
+        if markdown_source.strip() and st.session_state.get("summary_mode_suggest_digest") != pasted_digest:
+            st.session_state.summary_mode_suggest_digest = pasted_digest
+            apply_mode_suggestion(markdown_source, detected_material)
     current_source_digest = hashlib.sha256(markdown_source.encode("utf-8")).hexdigest()
     source_has_changed = bool(
         result and st.session_state.get("summary_source_digest") != current_source_digest
@@ -547,11 +568,21 @@ with workspace_col:
         mode_labels,
         default=mode_labels[0],
         key="summary_structure_choice",
-        help="先看结论跨章节重组信息；来龙去脉讲清一件事的经过；按章节梳理沿原文结构提炼。",
+        on_change=mark_mode_manual,
+        help=(
+            "先看结论：结论是什么；来龙去脉：发生了什么；上手步骤：怎么做；逐章梳理：每章讲什么。"
+            "读取原文后会按材料自动建议一种。"
+        ),
         width="stretch",
     )
     selected_mode = mode_order[mode_labels.index(selected_mode_label)]
-    st.caption(MODE_CAPTIONS[selected_mode])
+    suggestion = st.session_state.get("summary_mode_suggestion") or {}
+    suggestion_note = (
+        f"已按材料建议（{suggestion['reason']}） · "
+        if suggestion.get("mode") == selected_mode and suggestion.get("reason")
+        else ""
+    )
+    st.caption(suggestion_note + MODE_CAPTIONS[selected_mode])
     selected_style_label = st.segmented_control(
         "讲述方式",
         style_labels,
@@ -600,8 +631,6 @@ with workspace_col:
         detected_material.kind if material_override in (None, "auto") else material_override
     )
     effective_material = Material(**{**asdict(detected_material), "kind": material_kind})
-    if material_kind == "transcript" and selected_mode != "story":
-        st.caption("字幕材料若讲一件事或一场纠纷，可选“来龙去脉”；讲解或课程选“先看结论”。")
     generation_choice = generation_order[
         generation_labels.index(
             st.session_state.get("summary_generation_label", generation_labels[0])
@@ -1051,6 +1080,16 @@ with proof_col:
                     )
                 with download_col:
                     long_image_download_button(export, key="summary-export-download-inline")
+            st.download_button(
+                "下载 Markdown",
+                data=result.document.to_markdown().encode("utf-8"),
+                file_name=f"{output_name}.summary.md",
+                mime="text/markdown",
+                icon=":material/description:",
+                width="stretch",
+                on_click="ignore",
+                key="summary-export-markdown",
+            )
             st.caption(
                 f"{artifact.width} × {artifact.height} px · "
                 + (

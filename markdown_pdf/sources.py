@@ -108,6 +108,44 @@ def suggested_language(material: Material | None) -> Literal["source", "zh"]:
     return "source"
 
 
+_HEADING_RE = re.compile(r"(?m)^#{2,3}\s")
+_STEP_LINE_RE = re.compile(r"(?im)^\s*(?:第[一二三四五六七八九十\d]+步|步骤\s*\d|step\s*\d+|\d+[.)、]\s)")
+_HOWTO_WORD_RE = re.compile(
+    r"安装|配置|点击|打开|输入|运行|下载|注册|登录|设置|命令|教程|如何|怎么做|"
+    r"install|configure|click|run |set up|step|tutorial|how to",
+    re.IGNORECASE,
+)
+_STORY_WORD_RE = re.compile(
+    r"指控|起诉|纠纷|争议|调查|爆料|丑闻|封禁|禁赛|停赛|欠款|回应|否认|澄清|事件|"
+    r"accus|alleg|lawsuit|sued|dispute|investigat|banned|scandal|denied|scam|stole|stealing",
+    re.IGNORECASE,
+)
+SummaryModeName = Literal["standard", "story", "howto", "section"]
+
+
+def suggest_mode(text: str, material: Material | None = None) -> tuple[SummaryModeName, str]:
+    """Suggest the summary mode from the material's backbone: procedure, time, structure or argument.
+
+    Calibrated on real sources: dispute transcripts score 10–14 story words per 10k
+    characters (essays ~0); tutorials ~60 how-to words per 10k (others < 2).
+    """
+    sample = text[:60_000]
+    size = max(len(sample), 1)
+    howto = len(_HOWTO_WORD_RE.findall(sample)) * 10_000 / size
+    story = len(_STORY_WORD_RE.findall(sample)) * 10_000 / size
+    steps = len(_STEP_LINE_RE.findall(sample))
+    headings = len(_HEADING_RE.findall(sample))
+    if howto >= 25 and howto > story * 2 or (steps >= 5 and howto >= 10):
+        return "howto", "像教程或操作指南"
+    if story >= 8:
+        return "story", "像在讲一件事：有指控、纠纷或事件经过"
+    if (material is not None and material.kind == "document" and len(text) >= 20_000) or (
+        headings >= 8 and len(text) >= 15_000
+    ):
+        return "section", "是分章节的长篇文档"
+    return "standard", ""
+
+
 def classify_url(value: str) -> UrlType:
     candidate = value.strip()
     if "://" not in candidate:

@@ -204,3 +204,18 @@ class SettingsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ModeSuggestionTests(unittest.TestCase):
+    def test_backbones(self):
+        from sources import suggest_mode
+
+        dispute = "She accused him of stealing chips. The casino banned her after the dispute. " * 20
+        tutorial = "\n".join(f"{index}. 打开设置，点击安装，输入命令并运行。" for index in range(1, 9))
+        essay = "Great work tends to come from curiosity, delight and the desire to do something impressive. " * 30
+        report = "\n\n".join(f"## 第 {index} 章\n\n" + "本章讨论市场结构与长期趋势。" * 150 for index in range(1, 10))
+        self.assertEqual(suggest_mode(dispute)[0], "story")
+        self.assertEqual(suggest_mode(tutorial)[0], "howto")
+        self.assertEqual(suggest_mode(essay)[0], "standard")
+        self.assertEqual(suggest_mode(report)[0], "section")
+        self.assertEqual(suggest_mode(essay), ("standard", ""))

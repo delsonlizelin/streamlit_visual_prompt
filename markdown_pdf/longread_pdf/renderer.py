@@ -20,6 +20,13 @@ from summarizer.deepseek import SummaryDocument, SummaryItem
 ASSET_DIR = Path(__file__).resolve().parent / "assets"
 PROJECT_DIR = ASSET_DIR.parent.parent
 SUMMARY_FONT_PATH = PROJECT_DIR / "static" / "fonts" / "NotoSansSC-VariableFont_wght.ttf"
+FONT_DIR = SUMMARY_FONT_PATH.parent
+TYPEWRITER_FONT_PATH = FONT_DIR / "SpecialElite-Regular.ttf"
+# Visual themes for the summary artifact; each adds assets/themes/<name>.css last.
+# Summaries export as Markdown or a Paper Atlas long image; "briefing" is the plain base sheet.
+SUMMARY_THEMES = ("briefing", "atlas")
+DEFAULT_SUMMARY_THEME = "briefing"
+DEFAULT_LONG_IMAGE_THEME = "atlas"
 ALLOWED_MODES = {"desktop", "tablet", "mobile"}
 MODE_PROFILES = {
     "desktop": {
@@ -53,7 +60,8 @@ MODE_PROFILES = {
 LONG_IMAGE_PROFILES = {
     # iPad portrait (744pt mini / 768–834pt) at Retina density: the default share format.
     "tablet": {"viewport_width": 744, "device_scale_factor": 2},
-    "mobile": {"viewport_width": 409, "device_scale_factor": 3},
+    # Phone portrait (390pt) at 3x; the share viewer shows it at device width.
+    "mobile": {"viewport_width": 390, "device_scale_factor": 3},
 }
 MAX_LONG_IMAGE_CSS_HEIGHT = 10_500
 
@@ -377,6 +385,20 @@ def _mode_css(mode: str) -> str:
     })
 
 
+def _typewriter_font_css() -> str:
+    if not TYPEWRITER_FONT_PATH.is_file():
+        return ""
+    return (
+        '@font-face {'
+        'font-family: "Summary Typewriter";'
+        f'src: url("{TYPEWRITER_FONT_PATH.as_uri()}") format("truetype");'
+        'font-style: normal;'
+        'font-weight: 400;'
+        'font-display: block;'
+        '}'
+    )
+
+
 def _summary_font_css() -> str:
     if not SUMMARY_FONT_PATH.is_file():
         return ""
@@ -395,6 +417,7 @@ def _is_allowed_render_url(url: str, html_uri: str) -> bool:
     return (
         url == html_uri
         or url == SUMMARY_FONT_PATH.as_uri()
+        or url == TYPEWRITER_FONT_PATH.as_uri()
         or url.startswith(("data:", "https://"))
     )
 
@@ -448,9 +471,12 @@ def build_summary_document(
     mode: str = "tablet",
     *,
     continuous: bool = False,
+    theme: str = DEFAULT_SUMMARY_THEME,
 ) -> DocumentBuild:
     if mode not in ALLOWED_MODES:
         raise RenderError(f"未知模式：{mode}")
+    if theme not in SUMMARY_THEMES:
+        raise RenderError(f"未知样式：{theme}")
     if continuous and mode not in LONG_IMAGE_PROFILES:
         raise RenderError("长图只支持平板和手机模式。")
     # Streamlit Cloud can hot-reload ``summarizer.deepseek`` while this module
@@ -496,13 +522,18 @@ def build_summary_document(
     ]
     if continuous:
         css_parts.append((ASSET_DIR / "long_image.css").read_text(encoding="utf-8"))
+    if theme != "briefing":
+        css_parts.append(_typewriter_font_css())
+    theme_css = ASSET_DIR / "themes" / f"{theme}.css"
+    if theme_css.is_file():
+        css_parts.append(theme_css.read_text(encoding="utf-8"))
 
     template = (ASSET_DIR / "summary_template.html").read_text(encoding="utf-8")
     document = _fill(template, {
         "LANG": _detect_language(normalized),
         "BASE_URL": "",
         "MODE": mode,
-        "OUTPUT_CLASS": "continuous-output" if continuous else "paged-output",
+        "OUTPUT_CLASS": ("continuous-output" if continuous else "paged-output") + f" theme-{theme}",
         "TITLE": html_lib.escape(title),
         "SHORT_TITLE": html_lib.escape(running_title),
         "SUMMARY_DECK": summary_deck,
@@ -649,16 +680,16 @@ def render_markdown(markdown_source: str, mode: str = "desktop") -> RenderResult
     return _render_paged_document(build, mode=mode)
 
 
-def render_summary_pdf(summary_source: str | SummaryDocument, mode: str = "tablet") -> RenderResult:
-    build = build_summary_document(summary_source, mode=mode)
-    return _render_paged_document(build, mode=mode)
-
-
-def render_summary_long_image(summary_source: str | SummaryDocument, mode: str = "tablet") -> LongImageResult:
+def render_summary_long_image(
+    summary_source: str | SummaryDocument,
+    mode: str = "tablet",
+    *,
+    theme: str = DEFAULT_LONG_IMAGE_THEME,
+) -> LongImageResult:
     if mode not in LONG_IMAGE_PROFILES:
         raise RenderError("长图只支持平板和手机模式。")
 
-    build = build_summary_document(summary_source, mode=mode, continuous=True)
+    build = build_summary_document(summary_source, mode=mode, continuous=True, theme=theme)
     profile = LONG_IMAGE_PROFILES[mode]
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="markdown-image-") as temp_dir:

@@ -202,3 +202,46 @@ graph TD
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SummaryThemeTests(unittest.TestCase):
+    def document(self):
+        from summarizer.deepseek import parse_summary_document
+
+        return parse_summary_document(
+            {
+                "title": "标题",
+                "byline": "频道名",
+                "lead": "导语说明局面。",
+                "sections": [{"heading": "分区", "items": [{"text": "条目。", "highlights": []}]}],
+            }
+        )
+
+    def test_long_images_default_to_paper_atlas(self):
+        from longread_pdf.renderer import DEFAULT_LONG_IMAGE_THEME, build_summary_document
+
+        self.assertEqual(DEFAULT_LONG_IMAGE_THEME, "atlas")
+        atlas = build_summary_document(self.document(), mode="tablet", continuous=True, theme="atlas").html
+        self.assertIn("theme-atlas", atlas)
+        self.assertIn("Summary Typewriter", atlas)
+        plain = build_summary_document(self.document(), mode="tablet", continuous=True, theme="briefing").html
+        self.assertIn("theme-briefing", plain)
+        self.assertNotIn("Summary Typewriter", plain)
+
+    def test_markdown_export(self):
+        markdown = self.document().to_markdown()
+        self.assertTrue(markdown.startswith("# 标题\n\n*频道名*\n\n> 导语说明局面。"))
+        self.assertIn("## 分区\n\n- 条目。", markdown)
+
+    def test_lead_renders_as_header_standfirst(self):
+        from longread_pdf.renderer import build_summary_document
+
+        html = build_summary_document(self.document(), mode="mobile", continuous=True).html
+        self.assertIn('<p class="summary-deck">导语说明局面。</p>', html)
+        self.assertNotIn('class="summary-lead', html.split("<article", 1)[1])
+
+    def test_unknown_theme_is_rejected(self):
+        from longread_pdf.renderer import RenderError, build_summary_document
+
+        with self.assertRaises(RenderError):
+            build_summary_document(self.document(), theme="neon")

@@ -9,6 +9,22 @@ colors:
   rule: "#d9dde0"
   canvas: "#f1f3f4"
   surface: "#ffffff"
+  atlas-desk: "#e6dbc5"
+  atlas-paper: "#f6f0e3"
+  atlas-newsprint: "#ede7da"
+  atlas-ink: "#201d19"
+  atlas-soft-ink: "#3a352e"
+  atlas-muted: "#6c6255"
+  atlas-red: "#c4432d"
+  atlas-blue: "#2c5ca6"
+  atlas-saffron: "#e3a63c"
+  atlas-kraft: "#c9a679"
+  atlas-shadow-near: "rgba(60, 40, 10, .1)"
+  atlas-shadow-far: "rgba(60, 40, 10, .13)"
+  atlas-tape: "rgba(238, 226, 196, .82)"
+  atlas-marker: "rgba(227, 166, 60, .58)"
+  mask-solid: "#000"
+  mask-fade: "rgba(0, 0, 0, .55)"
 typography:
   display:
     fontFamily: '"Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", sans-serif'
@@ -39,6 +55,56 @@ typography:
     fontWeight: 760
     lineHeight: 1.35
     letterSpacing: ".05em"
+  artifact-title-pad:
+    fontFamily: '"Noto Sans SC", sans-serif'
+    fontSize: "40px"
+    fontWeight: 800
+    lineHeight: 1.18
+  artifact-title-phone:
+    fontFamily: '"Noto Sans SC", sans-serif'
+    fontSize: "28px"
+    fontWeight: 800
+    lineHeight: 1.2
+  artifact-heading-pad:
+    fontFamily: '"Noto Sans SC", sans-serif'
+    fontSize: "26px"
+    fontWeight: 800
+    lineHeight: 1.32
+  artifact-heading-phone:
+    fontFamily: '"Noto Sans SC", sans-serif'
+    fontSize: "21px"
+    fontWeight: 800
+    lineHeight: 1.34
+  artifact-standfirst-pad:
+    fontFamily: '"Noto Sans SC", sans-serif'
+    fontSize: "21px"
+    fontWeight: 400
+    lineHeight: 1.72
+  artifact-standfirst-phone:
+    fontFamily: '"Noto Sans SC", sans-serif'
+    fontSize: "18px"
+    fontWeight: 400
+    lineHeight: 1.7
+  artifact-body-pad:
+    fontFamily: '"Noto Sans SC", sans-serif'
+    fontSize: "20px"
+    fontWeight: 400
+    lineHeight: 1.78
+  artifact-body-phone:
+    fontFamily: '"Noto Sans SC", sans-serif'
+    fontSize: "17.5px"
+    fontWeight: 400
+    lineHeight: 1.75
+  artifact-meta-pad:
+    fontFamily: '"Summary Typewriter", "Noto Sans SC", sans-serif'
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: 1.45
+  artifact-meta-phone:
+    fontFamily: '"Summary Typewriter", "Noto Sans SC", sans-serif'
+    fontSize: "13px"
+    fontWeight: 400
+    lineHeight: 1.45
 rounded:
   field: ".625rem"
   surface: ".75rem"
@@ -143,7 +209,7 @@ The application sits in a centered container capped at 1240px. On desktop, the s
 
 At 768px and below, the columns become a natural vertical flow with 1rem side insets, full-width controls, and a 44px minimum touch target. Headings wrap rather than shrink into a desktop proportion. In the result region, freshness and quality status appear first, the compact local editor follows, and only then does the potentially very tall artifact appear. The exported artifact remains a single reading surface instead of turning into nested cards.
 
-The long image is pad-first: the default export is an iPad-portrait page (744 CSS px at 2×, 1488 px wide) with wider gutters and a larger reading scale (12.6pt items, 16.4pt section titles, 27pt title) that holds the measure near 34 Chinese characters; the phone export (409 CSS px at 3×) remains available. The header sits on the canvas: title, then the lead as a standfirst in regular weight and slate ink (never a bold block inside the sheet), then the byline as subordinate metadata. Leads are budgeted in the prompt (about 60 characters for 先看结论, 80–140 for 来龙去脉), and a lint warns when they run long. The long image uses a white rounded proof sheet on the cool canvas for the numbered sections only. Its sections stack vertically with consistent seams, compact heading-to-body distance, and narrow outer gutters. The proof sheet itself adds no second page inset: only the sheet gutter, section inset, and list hanging indent shape the measure, keeping roughly 80% of the mobile canvas available to body text without making it feel edge-bound.
+The long image is pad-first and sized for the screen it is opened on: share viewers scale a long image to the device width, so CSS px ≈ points there. Pad (744 CSS px at 2×, 1488 px wide): 20px body at 1.78 leading, about 27 Chinese characters per line, 26px section titles, a 40px title, 56/48px header insets and 32px sheet gutters. Phone (390 CSS px at 3×, 1170 px wide): 17.5px body, about 17 characters per line. The header carries the title, then the lead as a regular-weight standfirst (never a bold block), then the byline. Leads are budgeted in the prompt and a lint flags long ones. Long images use the **Paper Atlas** artifact theme described below; paged PDFs keep the plain briefing sheet.
 
 **The Proof-First Rule.** On wide screens, result proof receives more width than configuration; within that proof region, status and recovery controls must remain reachable before a potentially very tall image. On narrow screens, source, material choices, action, refinements, and proof follow task order.
 
@@ -202,6 +268,18 @@ A two-digit cinnabar index sits in a narrow rail beside a strong Graphite Ink he
 ### Summary Proof
 
 The proof is one white editorial sheet. Its sections use two-digit cinnabar numbering, natural graphite headings, neutral gray list markers, quiet seams, and concise body copy. Cinnabar emphasizes only conclusion-changing phrases. Metadata is subordinate, and no fake logo, snapshot, promotional footer, or generic disclaimer is appended.
+
+## Summary Artifact Theme: Paper Atlas
+
+The exported long image borrows the user's v3 "Paper Atlas" video world (`Projects/videos/altitude-sickness-video/v3-collage/STYLE.md`): paper pieces on a warm desk. The app's interface keeps the cool policy-briefing workbench, so the artifact reads as a made object handed across that desk.
+
+- **Desk and paper:** warm desk `#e6dbc5` with fine SVG grain; paper sheets `#f6f0e3`; newsprint `#ede7da`; kraft tags `#c9a679`.
+- **Inks:** ink `#201d19`; red `#c4432d` only for list markers; blue `#2c5ca6` only as the halftone print behind the title; saffron `#e3a63c` only as the reading marker on highlights.
+- **Title:** heavy Noto Sans SC set on cut-paper strips, one strip per line, with a slight negative rotation.
+- **Standfirst:** a newsprint card held by one strip of tape.
+- **Byline and numbers:** typed in Special Elite, a typewriter face (`static/fonts/SpecialElite-Regular.ttf`, Apache 2.0). Section numbers sit on kraft tags.
+- **Sections:** separate paper sheets with deterministic torn tops and alternating ±0.3° rotation. They are not one card.
+- **Never:** stamps, mascots, emoji, glyph icons or coloured highlight text. Chinese text always stays in Noto Sans SC.
 
 ## Do's and Don'ts
 
