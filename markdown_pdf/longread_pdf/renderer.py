@@ -51,7 +51,8 @@ MODE_PROFILES = {
     },
 }
 LONG_IMAGE_PROFILES = {
-    "tablet": {"viewport_width": 500, "device_scale_factor": 3},
+    # iPad portrait (744pt mini / 768–834pt) at Retina density: the default share format.
+    "tablet": {"viewport_width": 744, "device_scale_factor": 2},
     "mobile": {"viewport_width": 409, "device_scale_factor": 3},
 }
 MAX_LONG_IMAGE_CSS_HEIGHT = 10_500
@@ -329,12 +330,8 @@ def _highlight_summary_text(item: SummaryItem) -> str:
 
 
 def _render_structured_summary(document: SummaryDocument) -> str:
+    # The lead is rendered as the header standfirst (see build_summary_document).
     parts: list[str] = []
-    if document.lead:
-        parts.append(
-            '<section class="summary-lead" aria-label="全文结论">'
-            f"<p>{html_lib.escape(document.lead)}</p></section>"
-        )
     for index, section in enumerate(document.sections, start=1):
         items = "".join(f"<li>{_highlight_summary_text(item)}</li>" for item in section.items)
         parts.append(
@@ -474,6 +471,11 @@ def build_summary_document(
             if summary_source.byline
             else ""
         )
+        summary_deck = (
+            f'<p class="summary-deck">{html_lib.escape(summary_source.lead)}</p>'
+            if summary_source.lead
+            else ""
+        )
     else:
         if not summary_source.strip():
             raise RenderError("摘要内容不能为空。")
@@ -485,6 +487,7 @@ def build_summary_document(
         article_html, toc = _render_article(body)
         article_html = _wrap_summary_sections(article_html)
         summary_meta = '<p class="summary-meta">由原文提炼</p>'
+        summary_deck = ""
     running_title = _short_running_title(title)
     css_parts = [
         _mode_css(mode),
@@ -502,6 +505,7 @@ def build_summary_document(
         "OUTPUT_CLASS": "continuous-output" if continuous else "paged-output",
         "TITLE": html_lib.escape(title),
         "SHORT_TITLE": html_lib.escape(running_title),
+        "SUMMARY_DECK": summary_deck,
         "SUMMARY_META": summary_meta,
         "CONTENT": article_html,
         "CSS": "\n".join(css_parts),
@@ -650,7 +654,7 @@ def render_summary_pdf(summary_source: str | SummaryDocument, mode: str = "table
     return _render_paged_document(build, mode=mode)
 
 
-def render_summary_long_image(summary_source: str | SummaryDocument, mode: str = "mobile") -> LongImageResult:
+def render_summary_long_image(summary_source: str | SummaryDocument, mode: str = "tablet") -> LongImageResult:
     if mode not in LONG_IMAGE_PROFILES:
         raise RenderError("长图只支持平板和手机模式。")
 

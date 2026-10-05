@@ -9,3 +9,4 @@ markdown_pdf/.streamlit/secrets.toml
 markdown_pdf/Noto_Sans_SC.zip
 markdown_pdf/logs-*.txt
 .streamlit/secrets.toml
+markdown_pdf/evals/

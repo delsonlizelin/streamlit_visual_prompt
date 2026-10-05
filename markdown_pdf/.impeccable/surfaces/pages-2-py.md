@@ -12,7 +12,7 @@ related_targets: ["longread_pdf/assets/summary_template.html","longread_pdf/asse
 
 ## Audience, job, action, and proof
 
-- A reader or knowledge worker supplies a long source and needs a faithful, share-ready mobile brief with minimal setup.
+- A reader or knowledge worker supplies a long source and needs a faithful, share-ready brief (pad-size by default, phone available) with minimal setup.
 - Primary action: generate the summary image.
 - Proof: the structured long-image result is the dominant artifact, not marketing copy or synthetic metrics.
 - Constraints: preserve Streamlit behavior, responsive stacking, keyboard access, source editability, and deterministic Chinese typography.
@@ -32,7 +32,7 @@ related_targets: ["longread_pdf/assets/summary_template.html","longread_pdf/asse
 | Source/settings region | Compact numbered workflow, flat white fields, 10–12px corner language, no card stack | Streamlit controls + CSS |
 | Primary action | Full-width cinnabar button, no gradient or glow | Streamlit button + CSS |
 | Result proof | Largest region on wide screens; freshness, quality, and local-edit controls precede the potentially tall image; natural stack on mobile | Streamlit controls + deterministic PNG renderer |
-| Summary header | Title, optional source/author metadata, no fake snapshot or logo | HTML template |
+| Summary header | Title, regular-weight standfirst (the lead), then byline metadata, all on the canvas; no fake snapshot or logo | HTML template |
 | Summary sections | One white reading sheet with hairline separation, no nested page inset, and a compact number rail so body copy keeps roughly 80% of the mobile canvas | Structured data + HTML/CSS |
 | Emphasis | 0–2 short spans per item, cinnabar plus weight; routine bullets remain neutral and color is never the sole carrier | Escaped HTML spans |
 | Type | Project-hosted Noto Sans SC variable font, tabular section figures, strong scale contrast | CSS font stack |

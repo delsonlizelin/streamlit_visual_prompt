@@ -17,7 +17,7 @@ def _component_v2(*args, **kwargs):  # noqa: ANN002, ANN003
 _AUTO_ARTICLE_URL_INPUT = _component_v2(
     "auto_article_url_input",
     html="""
-      <label for="article-url">文章网址</label>
+      <label for="article-url">网址</label>
       <input id="article-url" type="url" inputmode="url"
              autocomplete="url" autocapitalize="none" spellcheck="false"
              placeholder="https://mp.weixin.qq.com/s/...">
@@ -59,6 +59,9 @@ _AUTO_ARTICLE_URL_INPUT = _component_v2(
       export default function(component) {
         const { parentElement, data, setStateValue } = component;
         const input = parentElement.querySelector("input");
+        const label = parentElement.querySelector("label");
+        if (typeof data?.label === "string") label.textContent = data.label;
+        if (typeof data?.placeholder === "string") input.placeholder = data.placeholder;
         const incoming = typeof data?.value === "string" ? data.value : "";
         if (document.activeElement !== input && input.value !== incoming) {
           input.value = incoming;
@@ -159,18 +162,24 @@ _NATIVE_IMAGE_SHARE = _component_v2(
 )
 
 
-def auto_article_url_input(value: str, *, key: str) -> str:
+def auto_article_url_input(
+    value: str,
+    *,
+    key: str,
+    label: str = "网址",
+    placeholder: str = "https://mp.weixin.qq.com/s/...",
+) -> str:
     """Return a complete pasted or typed URL without requiring Enter."""
     if _AUTO_ARTICLE_URL_INPUT is None:
         return st.text_input(
-            "文章网址",
+            label,
             value=value,
-            placeholder="https://mp.weixin.qq.com/s/...",
+            placeholder=placeholder,
             help="粘贴完整网址后按 Enter 读取。",
             key=key,
         ).strip()
     result = _AUTO_ARTICLE_URL_INPUT(
-        data={"value": value},
+        data={"value": value, "label": label, "placeholder": placeholder},
         default={"url": value},
         key=key,
         on_url_change=lambda: None,

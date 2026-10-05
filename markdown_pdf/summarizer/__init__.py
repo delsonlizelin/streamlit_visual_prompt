@@ -1,6 +1,13 @@
 """Small DeepSeek-backed Markdown summarizer."""
 
 from .deepseek import (
+    ALLOWED_MODELS,
+    GENERATION_CAPTIONS,
+    GENERATION_LABELS,
+    REASONING_CEILING,
+    REASONING_EFFORTS,
+    resolve_generation,
+    resolve_model,
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
     LENGTH_CAPTIONS,
@@ -40,6 +47,13 @@ from .quality import (
 )
 
 __all__ = [
+    "ALLOWED_MODELS",
+    "GENERATION_CAPTIONS",
+    "GENERATION_LABELS",
+    "REASONING_CEILING",
+    "REASONING_EFFORTS",
+    "resolve_generation",
+    "resolve_model",
     "DEFAULT_BASE_URL",
     "DEFAULT_MODEL",
     "LENGTH_CAPTIONS",

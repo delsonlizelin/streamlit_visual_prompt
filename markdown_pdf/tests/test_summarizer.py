@@ -10,6 +10,7 @@ from summarizer.deepseek import (
     DEFAULT_MODEL,
     MAX_CUSTOM_INSTRUCTION_CHARACTERS,
     MAX_SOURCE_CHARACTERS,
+    REASONING_CEILING,
     SYSTEM_PROMPT,
     SummaryError,
     build_messages,
@@ -156,7 +157,10 @@ class SummarizerTests(unittest.TestCase):
         self.assertIn("研究或报告优先交代研究问题", SYSTEM_PROMPT)
         self.assertIn("不为凑齐这些要素补写", SYSTEM_PROMPT)
         self.assertIn("lead 不是目录，不得与第一条重复", SYSTEM_PROMPT)
-        self.assertIn("lead 不放具体数字、日期或样本量", SYSTEM_PROMPT)
+        self.assertNotIn("lead 不放具体数字、日期或样本量", SYSTEM_PROMPT)
+        self.assertIn("统计数字、样本量和证据来源留给条目", standard)
+        self.assertIn("“结论”就是局面本身", standard)
+        self.assertIn("放在读者第一次需要它的位置", SYSTEM_PROMPT)
         self.assertIn("高亮总字数尽量低于正文的 10%", SYSTEM_PROMPT)
 
     def test_default_summary_has_a_smaller_budget_and_conclusion_first_contract(self):
@@ -352,8 +356,9 @@ class SummarizerTests(unittest.TestCase):
         self.assertEqual(body["reasoning_effort"], "high")
         self.assertNotIn("temperature", body)
         self.assertEqual(body["response_format"], {"type": "json_object"})
-        self.assertEqual(body["max_tokens"], 17_800)
-        self.assertFalse(body["stream"])
+        self.assertEqual(body["max_tokens"], 1_800 + REASONING_CEILING)
+        self.assertTrue(body["stream"])
+        self.assertEqual(body["stream_options"], {"include_usage": True})
         self.assertEqual(result.document.title, "测试主题")
         self.assertEqual(result.document.sections[0].items[0].highlights, ("关键事实",))
         self.assertEqual(result.prompt_tokens, 42)
@@ -433,7 +438,7 @@ class SummarizerTests(unittest.TestCase):
             request_payload["quality_feedback"],
             ["long-item: 第 1 节第 1 条较长。"],
         )
-        self.assertEqual(body["max_tokens"], 17_800)
+        self.assertEqual(body["max_tokens"], 1_800 + REASONING_CEILING)
         self.assertEqual(result.prompt_tokens, 70)
 
     def test_overlong_highlight_is_dropped_without_losing_the_item(self):
@@ -669,7 +674,7 @@ class SummarizerTests(unittest.TestCase):
             )
 
         body = json.loads(captured["request"].data.decode("utf-8"))
-        self.assertEqual(body["max_tokens"], 22_500)
+        self.assertEqual(body["max_tokens"], 6_500 + REASONING_CEILING)
         self.assertIn("理解某一结论所必需", body["messages"][1]["content"])
 
     def test_detailed_summary_uses_larger_output_budget_and_custom_prompt(self):
@@ -697,7 +702,7 @@ class SummarizerTests(unittest.TestCase):
             )
 
         body = json.loads(captured["request"].data.decode("utf-8"))
-        self.assertEqual(body["max_tokens"], 22_000)
+        self.assertEqual(body["max_tokens"], 6_000 + REASONING_CEILING)
         self.assertEqual(body["model"], "deepseek-v4-pro")
         self.assertIn("保留所有数字", body["messages"][1]["content"])
 
@@ -870,7 +875,7 @@ class SummarizerTests(unittest.TestCase):
         with patch(
             "summarizer.deepseek.urlopen", return_value=FakeResponse(payload)
         ):
-            with self.assertRaisesRegex(SummaryError, "思考阶段耗尽"):
+            with self.assertRaisesRegex(SummaryError, "思考阶段用尽"):
                 summarize_markdown(
                     "# Title",
                     mode="standard",
@@ -881,3 +886,160 @@ class SummarizerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StreamingResponse:
+    """A urlopen stand-in that yields server-sent-event lines one at a time."""
+
+    def __init__(self, lines: list[str]):
+        self.lines = [line.encode("utf-8") for line in lines]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def readline(self) -> bytes:
+        return self.lines.pop(0) if self.lines else b""
+
+
+def sse_lines(content: str, *, reasoning: str = "", usage: dict | None = None) -> list[str]:
+    lines = [": keep-alive\n", "\n"]
+    if reasoning:
+        delta = {"choices": [{"delta": {"reasoning_content": reasoning}}]}
+        lines += [f"data: {json.dumps(delta, ensure_ascii=False)}\n", "\n"]
+    half = len(content) // 2
+    for part in (content[:half], content[half:]):
+        delta = {"model": "deepseek-flash", "choices": [{"delta": {"content": part}}]}
+        lines += [f"data: {json.dumps(delta, ensure_ascii=False)}\n", "\n"]
+    final = {"choices": [{"delta": {}, "finish_reason": "stop"}]}
+    lines += [f"data: {json.dumps(final)}\n", "\n"]
+    usage_chunk = {"choices": [], "usage": usage or {"prompt_tokens": 10, "completion_tokens": 20}}
+    lines += [f"data: {json.dumps(usage_chunk)}\n", "\n", "data: [DONE]\n", "\n"]
+    return lines
+
+
+class RedesignTests(unittest.TestCase):
+    def test_story_mode_contract(self):
+        from summarizer.deepseek import LENGTH_TARGETS, MODE_LABELS, _MAX_OUTPUT_TOKENS
+
+        content = build_messages("# 标题", mode="story", language="zh")[1]["content"]
+        self.assertIn("lead 必须填写", content)
+        self.assertIn("谁和谁", content)
+        self.assertIn("不照搬原文的讲述顺序", content)
+        self.assertIn("每条写明主语", content)
+        self.assertIn("未经证实的指控不得写成事实", content)
+        self.assertEqual(MODE_LABELS["story"], "来龙去脉")
+        for style in ("direct", "beginner"):
+            for length in ("normal", "detailed"):
+                self.assertIn(("story", style, length), LENGTH_TARGETS)
+                self.assertIn(("story", style, length), _MAX_OUTPUT_TOKENS)
+
+    def test_material_is_sent_as_task_config(self):
+        material = {"kind": "transcript", "origin": "youtube", "asr": True, "author": "Channel"}
+        content = build_messages("# 标题", mode="story", language="zh", material=material)[1]["content"]
+        payload = json.loads(content.split("\n", 1)[1])
+        self.assertEqual(payload["task_config"]["material"], material)
+        without = json.loads(build_messages("# 标题", mode="story", language="zh")[1]["content"].split("\n", 1)[1])
+        self.assertNotIn("material", without["task_config"])
+        self.assertIn("task_config.material", SYSTEM_PROMPT)
+        self.assertIn("署名优先使用 material", SYSTEM_PROMPT)
+
+    def test_fingerprint_tracks_effort_and_material(self):
+        base = dict(mode="standard", language="zh")
+        high = build_request_fingerprint("# 原文", **base, thinking=True, reasoning_effort="high")
+        maximum = build_request_fingerprint("# 原文", **base, thinking=True, reasoning_effort="max")
+        transcript = build_request_fingerprint(
+            "# 原文", **base, thinking=True, reasoning_effort="high", material={"kind": "transcript"}
+        )
+        self.assertNotEqual(high, maximum)
+        self.assertNotEqual(high, transcript)
+
+    def test_streamed_response_is_decoded_and_reports_progress(self):
+        progress: list[tuple[float, int, int]] = []
+        response = StreamingResponse(
+            sse_lines(json.dumps(SUMMARY_OBJECT, ensure_ascii=False), reasoning="想一想")
+        )
+        with patch("summarizer.deepseek.urlopen", return_value=response):
+            result = summarize_markdown(
+                "# 原文\n\n正文。",
+                mode="standard",
+                language="zh",
+                api_key="test-key",
+                on_progress=lambda *values: progress.append(values),
+            )
+        self.assertEqual(result.document.title, SUMMARY_OBJECT["title"])
+        self.assertEqual((result.prompt_tokens, result.completion_tokens), (10, 20))
+        self.assertEqual(result.model, "deepseek-flash")
+        self.assertTrue(progress)
+
+    def test_stream_error_chunk_raises_summary_error(self):
+        lines = ['data: {"error": {"message": "quota exceeded"}}\n', "\n"]
+        with patch("summarizer.deepseek.urlopen", return_value=StreamingResponse(lines)):
+            with self.assertRaisesRegex(SummaryError, "quota exceeded"):
+                summarize_markdown("# 原文", mode="standard", language="zh", api_key="k")
+
+    def test_every_request_streams_and_uses_one_reasoning_ceiling(self):
+        bodies: list[dict] = []
+
+        def fake_urlopen(request, timeout):
+            bodies.append(json.loads(request.data.decode("utf-8")))
+            return FakeResponse({"choices": [{"message": {"content": json.dumps(SUMMARY_OBJECT, ensure_ascii=False)}}]})
+
+        with patch("summarizer.deepseek.urlopen", side_effect=fake_urlopen):
+            for effort in ("low", "high", "max"):
+                summarize_markdown("# 原文", mode="standard", language="zh", api_key="k",
+                                   thinking=True, reasoning_effort=effort)
+            summarize_markdown("# 原文", mode="standard", language="zh", api_key="k", thinking=False)
+        self.assertTrue(all(body["stream"] for body in bodies))
+        self.assertEqual({body["max_tokens"] for body in bodies[:3]}, {1_800 + REASONING_CEILING})
+        self.assertEqual([body["reasoning_effort"] for body in bodies[:3]], ["low", "high", "max"])
+        self.assertEqual(bodies[3]["max_tokens"], 1_800)
+        self.assertNotIn("reasoning_effort", bodies[3])
+
+    def test_dropped_connection_is_retried_only_early(self):
+        from http.client import IncompleteRead
+
+        payload = {"choices": [{"message": {"content": json.dumps(SUMMARY_OBJECT, ensure_ascii=False)}}]}
+        with patch("summarizer.deepseek.time.sleep"), patch(
+            "summarizer.deepseek.urlopen", side_effect=[IncompleteRead(b""), FakeResponse(payload)]
+        ) as mocked:
+            summarize_markdown("# 原文", mode="standard", language="zh", api_key="k")
+        self.assertEqual(mocked.call_count, 2)
+
+        with patch("summarizer.deepseek.CONNECTION_RETRY_WINDOW_SECONDS", -1), patch(
+            "summarizer.deepseek.urlopen", side_effect=[IncompleteRead(b""), FakeResponse(payload)]
+        ) as mocked:
+            with self.assertRaisesRegex(SummaryError, "连接在"):
+                summarize_markdown("# 原文", mode="standard", language="zh", api_key="k")
+        self.assertEqual(mocked.call_count, 1)
+
+    def test_generation_policy_and_model_allow_list(self):
+        from summarizer import resolve_generation, resolve_model
+
+        self.assertEqual(resolve_generation("fast", mode="story"), (False, "high"))
+        self.assertEqual(resolve_generation("careful", mode="standard"), (True, "high"))
+        self.assertEqual(resolve_generation("auto", mode="standard", source_characters=2_000), (False, "high"))
+        self.assertTrue(resolve_generation("auto", mode="story")[0])
+        self.assertTrue(resolve_generation("auto", mode="standard", material_kind="transcript")[0])
+        self.assertTrue(resolve_generation("auto", mode="standard", source_characters=30_000)[0])
+        self.assertEqual(resolve_model("deepseek-v4.1-flash-expires-on-0910"), "deepseek-flash")
+        self.assertEqual(resolve_model(""), "deepseek-flash")
+
+    def test_attribution_revision_has_its_own_rules(self):
+        from summarizer.deepseek import SummaryDocument, build_revision_messages, parse_summary_document
+
+        draft = parse_summary_document(SUMMARY_OBJECT)
+        messages = build_revision_messages(
+            "# 原文", draft, ["核对归属"], mode="story", language="zh", feedback_kind="attribution"
+        )
+        self.assertIn("核对已有摘要的归属", messages[0]["content"])
+        self.assertIsInstance(draft, SummaryDocument)
+
+    def test_long_story_lead_is_accepted(self):
+        from summarizer.deepseek import parse_summary_document
+
+        document = dict(SUMMARY_OBJECT, lead="甲与乙因一笔欠款起争执。" * 40)
+        self.assertGreater(len(document["lead"]), 360)
+        self.assertEqual(parse_summary_document(document).lead, document["lead"])

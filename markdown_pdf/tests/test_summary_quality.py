@@ -102,3 +102,38 @@ class SummaryQualityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CrossLanguageNumberTests(unittest.TestCase):
+    def unsupported(self, summary: str, source: str) -> bool:
+        report = lint_summary_document(document_with(summary), source)
+        return "unsupported-number" in {issue.code for issue in report.issues}
+
+    def test_rewritten_quantities_are_accepted(self):
+        cases = [
+            ("CA 称 Britney 欠她 1.8万美元。", "Britney wasn't paying her $18,000."),
+            ("欠款 18,000 美元。", "her $18,000"),
+            ("这是 2016年 的旧事。", "back from 2016 when"),
+            ("生涯奖金约 2000 万美元。", "like 20 million in cashes"),
+            ("被指拿走 8万筹码。", "pocketing 80,000 chips"),
+            ("营收达到 3.5 billion 美元。", "营收为 35 亿美元。"),
+        ]
+        for summary, source in cases:
+            with self.subTest(summary=summary):
+                self.assertFalse(self.unsupported(summary, source))
+
+    def test_changed_quantities_are_still_reported(self):
+        self.assertTrue(self.unsupported("欠她 1.9万美元。", "her $18,000"))
+        self.assertTrue(self.unsupported("拿走 9万筹码。", "pocketing 80,000 chips"))
+
+
+class LeadLengthTests(unittest.TestCase):
+    def test_long_lead_is_reported(self):
+        from summarizer.deepseek import SummaryDocument, SummaryItem, SummarySection
+
+        def report(lead: str):
+            document = SummaryDocument("标题", None, lead, (SummarySection("判断", (SummaryItem("条目内容。"),)),))
+            return {issue.code for issue in lint_summary_document(document).issues}
+
+        self.assertIn("long-lead", report("甲与乙因一笔欠款起争执，" * 15))
+        self.assertNotIn("long-lead", report("甲与乙因一笔欠款起争执，目前仍在审查。"))

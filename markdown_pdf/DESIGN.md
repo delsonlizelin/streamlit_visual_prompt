@@ -130,6 +130,7 @@ The palette is a cool neutral field with a single warm signal; rarity gives the 
 - **Headline** (680, 1.35rem, 1.25): Numbered workbench section titles and major interface landmarks.
 - **Title** (740, 14.2pt, 1.36): Natural editorial headings inside the exported summary.
 - **Body** (400, 1rem, 1.7): Editable source, guidance, and explanatory copy; allow Chinese paragraphs to breathe rather than compressing line height.
+- **Standfirst** (400, 11.4pt phone / 13.2pt pad, 1.66): The summary lead under the exported title; hierarchy comes from size and tone, not weight.
 - **Label** (760, .82rem, .05em): Compact step numbers and short operational markers, using tabular numerals when numbered.
 
 ### Named Rules
@@ -142,7 +143,7 @@ The application sits in a centered container capped at 1240px. On desktop, the s
 
 At 768px and below, the columns become a natural vertical flow with 1rem side insets, full-width controls, and a 44px minimum touch target. Headings wrap rather than shrink into a desktop proportion. In the result region, freshness and quality status appear first, the compact local editor follows, and only then does the potentially very tall artifact appear. The exported artifact remains a single reading surface instead of turning into nested cards.
 
-The long image uses a white rounded proof sheet on the cool canvas. Its sections stack vertically with consistent seams, compact heading-to-body distance, and narrow outer gutters. The proof sheet itself adds no second page inset: only the sheet gutter, section inset, and list hanging indent shape the measure, keeping roughly 80% of the mobile canvas available to body text without making it feel edge-bound.
+The long image is pad-first: the default export is an iPad-portrait page (744 CSS px at 2×, 1488 px wide) with wider gutters and a larger reading scale (12.6pt items, 16.4pt section titles, 27pt title) that holds the measure near 34 Chinese characters; the phone export (409 CSS px at 3×) remains available. The header sits on the canvas: title, then the lead as a standfirst in regular weight and slate ink (never a bold block inside the sheet), then the byline as subordinate metadata. Leads are budgeted in the prompt (about 60 characters for 先看结论, 80–140 for 来龙去脉), and a lint warns when they run long. The long image uses a white rounded proof sheet on the cool canvas for the numbered sections only. Its sections stack vertically with consistent seams, compact heading-to-body distance, and narrow outer gutters. The proof sheet itself adds no second page inset: only the sheet gutter, section inset, and list hanging indent shape the measure, keeping roughly 80% of the mobile canvas available to body text without making it feel edge-bound.
 
 **The Proof-First Rule.** On wide screens, result proof receives more width than configuration; within that proof region, status and recovery controls must remain reachable before a potentially very tall image. On narrow screens, source, material choices, action, refinements, and proof follow task order.
 

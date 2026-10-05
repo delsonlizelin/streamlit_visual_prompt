@@ -21,6 +21,18 @@ _ENUMERATOR_RE = re.compile(
     r"(?:首先|其次|再次|最后))"
 )
 _PDF_PAGE_MARKER_RE = re.compile(r"(?m)^\[第[ \t]*\d+[ \t]*页\][ \t]*$")
+# Value matching tolerates rewrites that keep the quantity: "$18,000" vs "1.8万美元",
+# "20 million" vs "2000 万", "80,000 chips" vs "8万筹码", "2016" vs "2016年".
+_VALUE_RE = re.compile(
+    r"(?<![A-Za-z0-9.])(\d[\d,]*(?:\.\d+)?)\s*"
+    r"(万亿|亿|万|千|百万|thousand|million|billion|trillion|mn|bn|k\b|K\b)?\s*(%|％)?",
+    re.IGNORECASE,
+)
+_MULTIPLIERS = {
+    "万亿": 1e12, "亿": 1e8, "万": 1e4, "千": 1e3, "百万": 1e6,
+    "thousand": 1e3, "k": 1e3, "million": 1e6, "mn": 1e6,
+    "billion": 1e9, "bn": 1e9, "trillion": 1e12,
+}
 
 
 @dataclass(frozen=True)
@@ -58,6 +70,24 @@ def extract_numeric_tokens(value: str) -> tuple[str, ...]:
         if token and token not in tokens:
             tokens.append(token)
     return tuple(tokens)
+
+
+def _numeric_values(value: str) -> set[tuple[bool, float]]:
+    """Return (is_percent, magnitude) pairs with units and thousands separators resolved."""
+    values: set[tuple[bool, float]] = set()
+    for match in _VALUE_RE.finditer(value):
+        try:
+            number = float(match.group(1).replace(",", ""))
+        except ValueError:
+            continue
+        multiplier = _MULTIPLIERS.get((match.group(2) or "").lower(), 1.0)
+        values.add((bool(match.group(3)), round(number * multiplier, 6)))
+    return values
+
+
+def _token_supported_by_value(token: str, source_values: set[tuple[bool, float]]) -> bool:
+    candidates = _numeric_values(token)
+    return bool(candidates) and candidates <= source_values
 
 
 def _similarity_text(value: str) -> str:
@@ -138,6 +168,18 @@ def lint_summary_document(
             )
         )
 
+    if document.lead:
+        lead_cjk = len(re.findall(r"[\u3400-\u9fff]", document.lead))
+        lead_words = len(re.findall(r"\b[\w'-]+\b", document.lead))
+        if lead_cjk > 160 or (lead_cjk < 20 and lead_words > 100):
+            issues.append(
+                SummaryQualityIssue(
+                    severity="warning",
+                    code="long-lead",
+                    message="导语偏长，会在标题下形成大段文字；请压缩到两三句，把细节移到正文。",
+                )
+            )
+
     if document.lead and all_items:
         lead_text = _similarity_text(document.lead)
         first_item_text = _similarity_text(all_items[0][2])
@@ -185,25 +227,32 @@ def lint_summary_document(
 
     if source_text:
         # PDF extraction inserts navigation markers; they are not source facts.
-        source_numbers = set(
-            extract_numeric_tokens(_PDF_PAGE_MARKER_RE.sub("", source_text))
+        clean_source = _PDF_PAGE_MARKER_RE.sub("", source_text)
+        source_numbers = set(extract_numeric_tokens(clean_source))
+        source_values = _numeric_values(clean_source)
+        summary_text = "\n".join(
+            [document.title, document.byline or "", document.lead or ""]
+            + [
+                value
+                for section in document.sections
+                for value in (section.heading, *(item.text for item in section.items))
+            ]
         )
-        summary_numbers = set(
-            extract_numeric_tokens(
-                "\n".join(
-                    [document.title, document.byline or "", document.lead or ""]
-                    + [
-                        value
-                        for section in document.sections
-                        for value in (
-                            section.heading,
-                            *(item.text for item in section.items),
-                        )
-                    ]
-                )
+        # Re-read each summary number with its multiplier ("1.8万") so value matching sees
+        # the quantity, not the bare digits that the literal token regex captured.
+        summary_numbers = set(extract_numeric_tokens(summary_text))
+        summary_quantities = {
+            match.group(0).strip(): match for match in _VALUE_RE.finditer(summary_text)
+        }
+        unsupported = sorted(
+            token
+            for token in summary_numbers - source_numbers
+            if not any(
+                _token_supported_by_value(quantity, source_values)
+                for quantity, match in summary_quantities.items()
+                if _normalize_number(match.group(1)) == re.sub(r"[^\d.]", "", token)
             )
         )
-        unsupported = sorted(summary_numbers - source_numbers)
         if unsupported:
             preview = "、".join(unsupported[:6])
             suffix = "等" if len(unsupported) > 6 else ""
@@ -211,7 +260,10 @@ def lint_summary_document(
                 SummaryQualityIssue(
                     severity="warning",
                     code="unsupported-number",
-                    message=f"摘要中的数字 {preview}{suffix} 未在原文中找到完全一致的写法，请核对是否被改写或误写。",
+                    message=(
+                        f"摘要中的数字 {preview}{suffix} 在原文中找不到相同写法或相同数值，"
+                        "请核对是否被改写或误写。"
+                    ),
                 )
             )
 

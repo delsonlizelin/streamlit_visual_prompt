@@ -1,0 +1,33 @@
+[
+  {
+    "id": "dispute-video",
+    "source": "https://youtu.be/usnVKWJdAaU",
+    "modes": ["story", "standard"],
+    "generation": ["auto", "fast"]
+  },
+  {
+    "id": "wechat-opinion",
+    "source": "https://mp.weixin.qq.com/s/REPLACE_ME",
+    "modes": ["standard"],
+    "generation": ["auto"]
+  },
+  {
+    "id": "research-report",
+    "source": "inputs/report.pdf",
+    "modes": ["standard", "section"],
+    "generation": ["auto"]
+  },
+  {
+    "id": "tutorial",
+    "source": "inputs/tutorial.md",
+    "modes": ["standard"],
+    "generation": ["auto"]
+  },
+  {
+    "id": "interview-transcript",
+    "source": "inputs/interview.txt",
+    "paste": true,
+    "modes": ["standard", "story"],
+    "generation": ["auto"]
+  }
+]

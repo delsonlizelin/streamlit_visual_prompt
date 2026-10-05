@@ -10,14 +10,61 @@
     overflow: hidden;
   }
 
+  /* The paged tablet PDF keeps its 132mm page; the long image fills the pad viewport. */
+  body.summary-output.mode-tablet {
+    max-width: none;
+  }
+
   .summary-output .summary-shell {
     width: 100%;
     padding-bottom: 7mm;
     overflow: hidden;
   }
 
+  /* Pad page (744 CSS px): wider gutters and a larger reading scale keep the measure
+     near 34 Chinese characters instead of stretching phone-sized type across the page. */
+  .summary-output.mode-tablet .summary-header {
+    padding: 15mm 12mm 8mm;
+  }
+
+  .summary-output.mode-tablet .summary-header h1 {
+    max-width: 17em;
+    font-size: 27pt;
+    line-height: 1.2;
+  }
+
+  .summary-output.mode-tablet .summary-deck {
+    margin-top: 4.4mm;
+    font-size: 13.2pt;
+    line-height: 1.68;
+  }
+
+  .summary-output.mode-tablet .summary-meta {
+    margin-top: 3.6mm;
+    font-size: 10pt;
+  }
+
   .summary-output.mode-tablet .longread {
-    margin: 0 6mm;
+    margin: 0 9mm;
+  }
+
+  .summary-output.mode-tablet .summary-card {
+    padding: 8mm 8.5mm 8.5mm;
+  }
+
+  .summary-output.mode-tablet .longread h2 {
+    margin-bottom: 4.2mm;
+    font-size: 16.4pt;
+  }
+
+  .summary-output.mode-tablet .longread li {
+    margin-bottom: .62em;
+    font-size: 12.6pt;
+    line-height: 1.7;
+  }
+
+  .summary-output.mode-tablet .summary-shell {
+    padding-bottom: 10mm;
   }
 
   .summary-output.mode-mobile .longread {

@@ -77,19 +77,29 @@ class StreamlitEntrypointTests(unittest.TestCase):
         app = AppTest.from_file(APP_ROOT / "pages" / "2_文章摘要.py", default_timeout=10).run()
         source_input = next(area for area in app.text_area if area.label == "原文（可编辑）")
         source_input.set_value("https://example.com/story").run()
-        self.assertIn("读取这篇文章", [button.label for button in app.button])
+        self.assertIn("读取这个网址", [button.label for button in app.button])
         source_input = next(area for area in app.text_area if area.label == "原文（可编辑）")
         source_input.set_value("正文提到了 https://example.com/story").run()
-        self.assertNotIn("读取这篇文章", [button.label for button in app.button])
+        self.assertNotIn("读取这个网址", [button.label for button in app.button])
 
-    def test_old_non_thinking_session_keeps_its_mode(self) -> None:
+    def test_old_session_and_expired_model_secret_still_load(self) -> None:
         app = AppTest.from_file(APP_ROOT / "pages" / "2_文章摘要.py", default_timeout=10)
         app.session_state["summary_model_label"] = "DeepSeek V4 Flash · 非思考"
         app.secrets["DEEPSEEK_MODEL"] = "deepseek-v4.1-flash-expires-on-0910"
         app.run()
         self.assertEqual(list(app.exception), [])
-        control = next(c for c in app.selectbox if c.label == "摘要模型")
-        self.assertEqual(control.value, "DeepSeek V4.1 Flash · 非思考")
+        control = next(c for c in app.selectbox if c.label == "生成方式")
+        self.assertEqual(control.value, "自动（推荐）")
+
+    def test_youtube_url_is_local_only_when_disabled(self) -> None:
+        app = AppTest.from_file(APP_ROOT / "pages" / "2_文章摘要.py", default_timeout=10)
+        app.secrets["YOUTUBE_ENABLED"] = "false"
+        app.run()
+        source_input = next(area for area in app.text_area if area.label == "原文（可编辑）")
+        source_input.set_value("https://youtu.be/usnVKWJdAaU").run()
+        next(button for button in app.button if button.label == "读取这个网址").click().run()
+        self.assertIn("YouTube 字幕只在本机运行时读取。", [error.value for error in app.error])
+        self.assertEqual(list(app.exception), [])
 
     def test_summary_page_exposes_current_prompt_copy_button(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
@@ -97,18 +107,14 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertIn("build_prompt_template", source)
         self.assertIn("build_request_fingerprint", source)
 
-    def test_legacy_flash_secret_migrates_to_v4_1(self) -> None:
+    def test_legacy_flash_secret_still_loads(self) -> None:
         app = AppTest.from_file(
             APP_ROOT / "pages" / "2_文章摘要.py",
             default_timeout=10,
         )
         app.secrets["DEEPSEEK_MODEL"] = "deepseek-v4-flash"
         app.run()
-
-        model_control = next(
-            selectbox for selectbox in app.selectbox if selectbox.label == "摘要模型"
-        )
-        self.assertEqual(model_control.value, "DeepSeek V4.1 Flash · 非思考")
+        self.assertEqual(list(app.exception), [])
 
     @unittest.skipIf(
         STREAMLIT_VERSION < (1, 60),
@@ -126,7 +132,7 @@ class StreamlitEntrypointTests(unittest.TestCase):
         )
         self.assertEqual(
             mode_control.options,
-            ["先看结论（推荐）", "按章节梳理"],
+            ["先看结论", "来龙去脉", "按章节梳理"],
         )
         style_control = next(
             control
@@ -144,16 +150,22 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertEqual(length_control.options, ["标准篇幅（推荐）", "详细展开"])
         length_control.set_value("详细展开").run()
         self.assertEqual(length_control.value, "详细展开")
-        model_control = next(
-            selectbox for selectbox in app.selectbox if selectbox.label == "摘要模型"
+        generation_control = next(
+            selectbox for selectbox in app.selectbox if selectbox.label == "生成方式"
         )
-        self.assertEqual(
-            model_control.options,
-            ["DeepSeek V4.1 Flash · 非思考", "DeepSeek V4.1 Flash · High"],
+        self.assertEqual(generation_control.options, ["自动（推荐）", "快速", "仔细"])
+        self.assertEqual(generation_control.value, "自动（推荐）")
+        generation_control.set_value("仔细").run()
+        self.assertEqual(generation_control.value, "仔细")
+        material_control = next(
+            selectbox for selectbox in app.selectbox if selectbox.label == "材料类型"
         )
-        self.assertEqual(model_control.value, "DeepSeek V4.1 Flash · 非思考")
-        model_control.set_value("DeepSeek V4.1 Flash · High").run()
-        self.assertEqual(model_control.value, "DeepSeek V4.1 Flash · High")
+        self.assertEqual(len(material_control.options), 4)
+        mode_control = next(
+            control for control in app.get("button_group") if control.label == "摘要方式"
+        )
+        mode_control.set_value("来龙去脉").run()
+        self.assertEqual(mode_control.value, "来龙去脉")
         self.assertEqual(list(app.exception), [])
 
     @unittest.skipIf(
@@ -177,15 +189,15 @@ class StreamlitEntrypointTests(unittest.TestCase):
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
         self.assertIn('"paste": "粘贴文字"', source)
         self.assertIn('"upload": "上传文件"', source)
-        self.assertIn('"url": "文章网址"', source)
+        self.assertIn('"url": "网址"', source)
         self.assertIn("max_upload_size=100", source)
         self.assertIn('"重新读取这个文件"', source)
         self.assertIn("auto_article_url_input", source)
         self.assertNotIn('"读取网页正文"', source)
 
-    def test_summary_page_exposes_mobile_first_image_actions(self) -> None:
+    def test_summary_page_exposes_pad_first_image_actions(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
-        self.assertIn('artifact = build_summary_long_image(result.document, "mobile")', source)
+        self.assertIn('artifact = build_summary_long_image(result.document, "tablet")', source)
         self.assertIn("store_model_summary_result", source)
         self.assertIn("native_image_share", source)
         self.assertIn("长按保存", source)
@@ -201,7 +213,7 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertIn("lint_summary_document", source)
         self.assertIn('"按检查结果修订"', source)
         self.assertIn('"按我的要求修订"', source)
-        self.assertIn('"读取这篇文章"', source)
+        self.assertIn('"读取这个网址"', source)
         self.assertIn("revise_summary_with_feedback", source)
         self.assertIn("当前原文、摘要和上述反馈发送到 DeepSeek", source)
         self.assertLess(source.index('"按检查结果修订"'), source.index('with st.expander("手动编辑摘要'))
@@ -209,7 +221,7 @@ class StreamlitEntrypointTests(unittest.TestCase):
 
     def test_summary_page_describes_literal_number_matching_honestly(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
-        self.assertIn("数字字面匹配", source)
+        self.assertIn("相同写法或相同数值", source)
         self.assertIn("不判断数字的上下文、主体或因果关系", source)
         self.assertIn("本次只检查摘要结构", source)
 

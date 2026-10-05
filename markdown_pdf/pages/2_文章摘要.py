@@ -9,8 +9,9 @@ from urllib.parse import urlsplit
 
 import streamlit as st
 
+from dataclasses import asdict
+
 import ui_components
-from input_documents import InputDocumentError, extract_uploaded_document
 from longread_pdf import RenderError, render_summary_long_image
 from summarizer.quality import lint_summary_document
 from ui_components import clipboard_button, page_navigation
@@ -19,17 +20,40 @@ from ui_components import clipboard_button, page_navigation
 LOGGER = logging.getLogger(__name__)
 
 
-URL_DOCUMENT_SYMBOLS = ("UrlDocumentError", "fetch_url_document")
-url_documents_backend = importlib.import_module("url_documents")
-if not all(hasattr(url_documents_backend, name) for name in URL_DOCUMENT_SYMBOLS):
-    url_documents_backend = importlib.reload(url_documents_backend)
-UrlDocumentError = url_documents_backend.UrlDocumentError
-fetch_url_document = url_documents_backend.fetch_url_document
+SOURCE_SYMBOLS = (
+    "KIND_LABELS",
+    "Material",
+    "SourceDocument",
+    "SourceError",
+    "load_text",
+    "load_upload",
+    "load_url",
+    "material_task_config",
+    "suggested_language",
+)
+sources_backend = importlib.import_module("sources")
+if not all(hasattr(sources_backend, name) for name in SOURCE_SYMBOLS):
+    sources_backend = importlib.reload(sources_backend)
+KIND_LABELS = sources_backend.KIND_LABELS
+Material = sources_backend.Material
+SourceDocument = sources_backend.SourceDocument
+SourceError = sources_backend.SourceError
+load_text = sources_backend.load_text
+load_upload = sources_backend.load_upload
+load_url = sources_backend.load_url
+material_task_config = sources_backend.material_task_config
+suggested_language = sources_backend.suggested_language
+
+app_settings = importlib.import_module("app_settings")
+if not hasattr(app_settings, "resolve_settings"):
+    app_settings = importlib.reload(app_settings)
 
 
 SUMMARIZER_SYMBOLS = (
     "DEFAULT_BASE_URL",
     "DEFAULT_MODEL",
+    "GENERATION_CAPTIONS",
+    "GENERATION_LABELS",
     "LENGTH_LABELS",
     "LENGTH_CAPTIONS",
     "LENGTH_TARGETS",
@@ -45,6 +69,7 @@ SUMMARIZER_SYMBOLS = (
     "build_prompt_template",
     "build_request_fingerprint",
     "parse_summary_document",
+    "resolve_generation",
     "revise_summary_with_feedback",
     "summarize_markdown",
 )
@@ -54,6 +79,8 @@ if not all(hasattr(summarizer_backend, name) for name in SUMMARIZER_SYMBOLS):
 
 DEFAULT_BASE_URL = summarizer_backend.DEFAULT_BASE_URL
 DEFAULT_MODEL = summarizer_backend.DEFAULT_MODEL
+GENERATION_CAPTIONS = summarizer_backend.GENERATION_CAPTIONS
+GENERATION_LABELS = summarizer_backend.GENERATION_LABELS
 LENGTH_LABELS = summarizer_backend.LENGTH_LABELS
 LENGTH_CAPTIONS = summarizer_backend.LENGTH_CAPTIONS
 LENGTH_TARGETS = summarizer_backend.LENGTH_TARGETS
@@ -69,6 +96,7 @@ SummaryResult = summarizer_backend.SummaryResult
 build_prompt_template = summarizer_backend.build_prompt_template
 build_request_fingerprint = summarizer_backend.build_request_fingerprint
 parse_summary_document = summarizer_backend.parse_summary_document
+resolve_generation = summarizer_backend.resolve_generation
 revise_summary_with_feedback = summarizer_backend.revise_summary_with_feedback
 summarize_markdown = summarizer_backend.summarize_markdown
 
@@ -146,34 +174,67 @@ def clear_generated_content() -> None:
     st.session_state.pop("summary_clear_user_feedback", None)
 
 
-def use_source(*, text: str, output_name: str, meta: dict) -> None:
-    st.session_state.summary_markdown_source = text
-    st.session_state.summary_output_name = output_name
+LANGUAGE_LABEL_FOR = {"source": "跟随原文", "zh": "简体中文", "en": "English"}
+
+
+def apply_language_suggestion(material: Material) -> None:
+    """Default non-Chinese transcripts to Chinese, without overriding a manual choice."""
+    if not st.session_state.get("summary_language_manual"):
+        st.session_state.summary_language_label = LANGUAGE_LABEL_FOR[suggested_language(material)]
+
+
+def mark_language_manual() -> None:
+    st.session_state.summary_language_manual = True
+
+
+def use_source(document: SourceDocument, *, source: str) -> None:
+    st.session_state.summary_markdown_source = document.text
+    st.session_state.summary_output_name = safe_filename(document.output_name)
     st.session_state.summary_input_meta = {
-        **meta,
-        "digest": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "kind": KIND_LABELS[document.material.kind],
+        "is_pdf": document.material.kind == "document" and document.pages > 0,
+        "pages": document.pages,
+        "text_pages": document.text_pages,
+        "characters": document.characters,
+        "source": source,
+        "site": document.site,
+        "notices": list(document.notices),
+        "material": asdict(document.material),
+        "digest": hashlib.sha256(document.text.encode("utf-8")).hexdigest(),
     }
+    st.session_state.pop("summary_material_override", None)
+    apply_language_suggestion(document.material)
     clear_generated_content()
 
 
-def use_article_url(article_url: str) -> None:
-    """Read an article and replace the editor only after extraction succeeds."""
-    with st.spinner("正在读取网页正文…"):
-        document = fetch_url_document(article_url)
-    use_source(
-        text=document.text,
-        output_name=safe_filename(document.title),
-        meta={
-            "kind": "网页",
-            "pages": 0,
-            "characters": document.characters,
-            "source": "url",
-            "site": document.site,
-        },
-    )
-    st.session_state.summary_loaded_article_url = article_url
-    st.session_state.summary_article_url = article_url
-    st.session_state.summary_last_url_attempt = article_url
+def show_source_error(error: SourceError) -> None:
+    st.error(str(error))
+    if getattr(error, "hint", ""):
+        st.caption(error.hint)
+
+
+def progress_reporter(status, action: str):  # noqa: ANN001, ANN201
+    """Turn streaming progress into a live status label."""
+
+    def report(elapsed: float, reasoning_characters: int, content_characters: int) -> None:
+        phase = "正在写摘要" if content_characters else ("正在思考" if reasoning_characters else "等待响应")
+        status.update(label=f"{action} · {phase} · {elapsed:.0f} 秒")
+
+    return report
+
+
+def use_url(url: str) -> None:
+    """Read a web, WeChat or YouTube URL; replace the editor only after it succeeds."""
+    with st.spinner("正在读取…"):
+        document = load_url(
+            url,
+            youtube_enabled=settings.youtube_enabled,
+            youtube_proxy_url=settings.youtube_proxy_url,
+        )
+    use_source(document, source="url")
+    st.session_state.summary_loaded_article_url = url
+    st.session_state.summary_article_url = url
+    st.session_state.summary_last_url_attempt = url
 
 
 def apply_local_summary_document(document: SummaryDocument, previous_result: SummaryResult) -> None:
@@ -195,10 +256,10 @@ def apply_local_summary_document(document: SummaryDocument, previous_result: Sum
     )
     st.session_state.pop("summary_export", None)
     st.session_state.pop("summary_export_error", None)
-    artifact = build_summary_long_image(document, "mobile")
+    artifact = build_summary_long_image(document, "tablet")
     st.session_state.summary_export = {
         "digest": edited_digest,
-        "mode": "mobile",
+        "mode": "tablet",
         "artifact": artifact,
     }
 
@@ -229,7 +290,7 @@ def store_model_summary_result(
     st.session_state.pop("summary_export", None)
     st.session_state.pop("summary_export_error", None)
     try:
-        artifact = build_summary_long_image(result.document, "mobile")
+        artifact = build_summary_long_image(result.document, "tablet")
     except RenderError as error:
         # Preserve the paid model result so layout can be retried locally.
         st.session_state.summary_export_error = str(error)
@@ -242,7 +303,7 @@ def store_model_summary_result(
     else:
         st.session_state.summary_export = {
             "digest": summary_digest,
-            "mode": "mobile",
+            "mode": "tablet",
             "artifact": artifact,
         }
 
@@ -255,7 +316,7 @@ def render_source_controls() -> None:
     source_labels = {
         "paste": "粘贴文字",
         "upload": "上传文件",
-        "url": "文章网址",
+        "url": "网址",
     }
     source_method = st.segmented_control(
         "原文来源",
@@ -287,28 +348,24 @@ def render_source_controls() -> None:
             if st.session_state.get("summary_uploaded_digest") != digest or reread:
                 try:
                     with st.spinner("正在读取文件…"):
-                        document = extract_uploaded_document(uploaded.name, payload)
-                    use_source(
-                        text=document.text,
-                        output_name=document.stem,
-                        meta={
-                            "kind": document.kind,
-                            "pages": document.pages,
-                            "text_pages": document.text_pages,
-                            "characters": len(document.text),
-                            "source": "upload",
-                        },
-                    )
+                        document = load_upload(uploaded.name, payload)
+                    use_source(document, source="upload")
                     st.session_state.summary_uploaded_digest = digest
                     st.rerun()
-                except InputDocumentError as error:
-                    st.error(str(error))
+                except SourceError as error:
+                    show_source_error(error)
 
     elif source_method == "url":
         stored_article_url = str(st.session_state.get("summary_article_url", ""))
         article_url = auto_article_url_input(
             stored_article_url,
             key="summary_article_url_input",
+            label="网址",
+            placeholder=(
+                "公众号、网页或 YouTube 链接"
+                if settings.youtube_enabled
+                else "https://mp.weixin.qq.com/s/..."
+            ),
         )
         if article_url != stored_article_url:
             st.session_state.summary_article_url = article_url
@@ -329,18 +386,22 @@ def render_source_controls() -> None:
         if should_read_url:
             st.session_state.summary_last_url_attempt = article_url
             try:
-                use_article_url(article_url)
+                use_url(article_url)
                 st.rerun()
-            except UrlDocumentError as error:
-                st.error(str(error))
+            except SourceError as error:
+                show_source_error(error)
         if (
             article_url != st.session_state.get("summary_loaded_article_url")
             or st.session_state.get("summary_input_meta", {}).get("source") != "url"
         ):
             st.warning("当前网址尚未成功读取；编辑器可能仍是上一篇原文。请重新读取或切换来源。")
         st.caption(
-            "支持公开网页和微信公众号文章；粘贴完整网址后会自动读取。"
-            "登录、验证码或访问频率限制仍可能导致失败。"
+            (
+                "支持公开网页、微信公众号文章和 YouTube 字幕；"
+                if settings.youtube_enabled
+                else "支持公开网页和微信公众号文章；"
+            )
+            + "粘贴完整网址后会自动读取。登录、验证码或访问频率限制仍可能导致失败。"
         )
 
     input_meta = st.session_state.get("summary_input_meta")
@@ -351,12 +412,13 @@ def render_source_controls() -> None:
             st.session_state.summary_markdown_source.encode("utf-8")
         ).hexdigest()
         edit_note = " · 已在编辑器修改" if source_edited else ""
+        notice_note = "".join(f" · {notice}" for notice in input_meta.get("notices", []))
         st.caption(
-            f"已读取 {input_meta['kind']}{page_note}{site_note} · "
+            f"已读取 {input_meta['kind']}{page_note}{site_note}{notice_note} · "
             f"原文 {input_meta['characters']:,} 字符{edit_note}"
         )
         missing_pdf_pages = (
-            input_meta.get("kind") == "PDF"
+            input_meta.get("is_pdf", input_meta.get("kind") == "PDF")
             and input_meta.get("text_pages", input_meta.get("pages"))
             < input_meta.get("pages", 0)
         )
@@ -398,9 +460,12 @@ if "summary_markdown_source" not in st.session_state:
 if "summary_output_name" not in st.session_state:
     st.session_state.summary_output_name = "summary"
 
-api_key = secret_value("DEEPSEEK_API_KEY")
-model = DEFAULT_MODEL
-base_url = secret_value("DEEPSEEK_BASE_URL", DEFAULT_BASE_URL)
+settings = app_settings.resolve_settings(
+    {name: secret_value(name) for name in app_settings.SETTING_NAMES}
+)
+api_key = settings.api_key
+model = settings.model
+base_url = settings.base_url
 
 st.title("把长文，变成一张读得完的图")
 st.markdown(
@@ -411,7 +476,7 @@ if not api_key:
     st.info("未配置 DeepSeek API Key；可编辑原文，但无法生成。")
 
 result = st.session_state.get("summary_result")
-mode_order = ["standard", "section"]
+mode_order = ["standard", "story", "section"]
 mode_labels = [MODE_LABELS[mode] for mode in mode_order]
 if st.session_state.get("summary_structure_choice") not in (None, *mode_labels):
     st.session_state.summary_structure_choice = mode_labels[0]
@@ -424,17 +489,11 @@ language_options = {
     "简体中文": "zh",
     "English": "en",
 }
-model_options = {
-    "DeepSeek V4.1 Flash · 非思考": False,
-    "DeepSeek V4.1 Flash · High": True,
-}
-# Migrate live sessions without carrying an expired model or removed Pro option.
-old_label = st.session_state.get("summary_model_label")
-if old_label not in model_options:
-    st.session_state.summary_model_label = (
-        "DeepSeek V4.1 Flash · High" if old_label and "High" in old_label
-        else "DeepSeek V4.1 Flash · 非思考"
-    )
+generation_order = ["auto", "fast", "careful"]
+generation_labels = [GENERATION_LABELS[choice] for choice in generation_order]
+if st.session_state.get("summary_generation_label") not in (None, *generation_labels):
+    st.session_state.summary_generation_label = generation_labels[0]
+material_order = ["auto", "article", "document", "transcript"]
 
 workspace_col, proof_col = st.columns([0.86, 1.14], gap="large")
 with workspace_col:
@@ -455,13 +514,13 @@ with workspace_col:
         and looks_like_article_url(markdown_source)
     )
     if pasted_url_pending:
-        st.info("检测到你粘贴的是网址。先读取文章正文，再生成摘要。")
-        if st.button("读取这篇文章", icon=":material/article:", width="stretch"):
+        st.info("检测到你粘贴的是网址。先读取内容，再生成摘要。")
+        if st.button("读取这个网址", icon=":material/article:", width="stretch"):
             try:
-                use_article_url(markdown_source.strip())
+                use_url(markdown_source.strip())
                 st.rerun()
-            except UrlDocumentError as error:
-                st.error(str(error))
+            except SourceError as error:
+                show_source_error(error)
     url_source_pending = bool(
         st.session_state.get("summary_source_method") == "url"
         and (
@@ -472,6 +531,11 @@ with workspace_col:
     )
     input_source_pending = pasted_url_pending or url_source_pending
     st.caption(f"当前原文 · {len(markdown_source.strip()):,} 字符")
+    loaded_meta = st.session_state.get("summary_input_meta") or {}
+    if loaded_meta.get("material"):
+        detected_material = Material(**loaded_meta["material"])
+    else:
+        detected_material = load_text(markdown_source).material
     current_source_digest = hashlib.sha256(markdown_source.encode("utf-8")).hexdigest()
     source_has_changed = bool(
         result and st.session_state.get("summary_source_digest") != current_source_digest
@@ -483,7 +547,7 @@ with workspace_col:
         mode_labels,
         default=mode_labels[0],
         key="summary_structure_choice",
-        help="核心摘要会跨章节重组信息；按章节梳理会沿原文结构提炼。",
+        help="先看结论跨章节重组信息；来龙去脉讲清一件事的经过；按章节梳理沿原文结构提炼。",
         width="stretch",
     )
     selected_mode = mode_order[mode_labels.index(selected_mode_label)]
@@ -531,12 +595,30 @@ with workspace_col:
         st.warning(f"原文超过 {MAX_SOURCE_CHARACTERS // 10_000} 万字符，请拆分后再生成。")
     else:
         st.caption("点击后发送当前原文与方案到 DeepSeek。")
-    configured_model_index = 0
+    material_override = st.session_state.get("summary_material_override", "auto")
+    material_kind = (
+        detected_material.kind if material_override in (None, "auto") else material_override
+    )
+    effective_material = Material(**{**asdict(detected_material), "kind": material_kind})
+    if material_kind == "transcript" and selected_mode != "story":
+        st.caption("字幕材料若讲一件事或一场纠纷，可选“来龙去脉”；讲解或课程选“先看结论”。")
+    generation_choice = generation_order[
+        generation_labels.index(
+            st.session_state.get("summary_generation_label", generation_labels[0])
+        )
+    ]
+    thinking, reasoning_effort = resolve_generation(
+        generation_choice,
+        mode=selected_mode,
+        material_kind=material_kind,
+        source_characters=len(markdown_source.strip()),
+    )
+    resolved_generation = "仔细" if thinking else "快速"
     collapsed_language = str(st.session_state.get("summary_language_label", "跟随原文"))
-    collapsed_model = str(
-        st.session_state.get("summary_model_label", list(model_options)[configured_model_index])
-    ).replace("DeepSeek ", "")
-    with st.expander(f"其他设置 · {collapsed_language} · {collapsed_model}"):
+    collapsed_generation = (
+        f"自动 · {resolved_generation}" if generation_choice == "auto" else resolved_generation
+    )
+    with st.expander(f"其他设置 · {collapsed_language} · {collapsed_generation}"):
         custom_instructions = st.text_area(
             "补充要求（可选）",
             key="summary_custom_instructions",
@@ -548,24 +630,33 @@ with workspace_col:
                 "不能覆盖忠实性、内容结构和输出格式规则。"
             ),
         )
-        language_col, model_col = st.columns(2, gap="medium")
+        language_col, generation_col = st.columns(2, gap="medium")
         with language_col:
             language_label = st.selectbox(
                 "输出语言",
                 list(language_options),
                 key="summary_language_label",
+                on_change=mark_language_manual,
             )
-        with model_col:
-            model_label = st.selectbox(
-                "摘要模型",
-                list(model_options),
-                index=configured_model_index,
-                key="summary_model_label",
-                help=(
-                    "High 启用深度思考；非思考模式响应更快。两种模式均使用 V4.1 Flash。"
-                ),
+        with generation_col:
+            st.selectbox(
+                "生成方式",
+                generation_labels,
+                key="summary_generation_label",
+                help="快速不启用深度思考；仔细启用深度思考（DeepSeek V4.1 Flash），更慢但更稳。",
             )
-        thinking = model_options[model_label]
+        st.caption(GENERATION_CAPTIONS[generation_choice])
+        st.selectbox(
+            "材料类型",
+            material_order,
+            format_func=lambda kind: (
+                f"自动识别 · {KIND_LABELS[detected_material.kind]}"
+                if kind == "auto"
+                else KIND_LABELS[kind]
+            ),
+            key="summary_material_override",
+            help="字幕或转写稿会提示模型注意识别错误、缺少说话人标注，并逐句核对“谁说了什么”。",
+        )
         st.text_input("下载文件名", key="summary_output_name")
         clipboard_button(
             build_prompt_template(
@@ -575,6 +666,7 @@ with workspace_col:
                 style=selected_style,
                 length=selected_length,
                 custom_instructions=custom_instructions,
+                material=material_task_config(effective_material),
             ),
             "复制当前完整 Prompt",
             key="summary-prompt-template",
@@ -589,6 +681,8 @@ with workspace_col:
         custom_instructions=custom_instructions,
         model=model,
         thinking=thinking,
+        reasoning_effort=reasoning_effort,
+        material=material_task_config(effective_material),
     )
     request_is_stale = bool(
         result
@@ -608,7 +702,8 @@ if generate_clicked:
         st.error(f"文稿超过 {MAX_SOURCE_CHARACTERS // 10_000} 万字符，请拆分后再摘要。")
     else:
         try:
-            with st.spinner("正在提炼重点并排版长图…"):
+            action = "仔细提炼（约 1–2 分钟）" if thinking else "正在提炼"
+            with st.status(action, expanded=False) as status:
                 generated_result = summarize_markdown(
                     markdown_source,
                     mode=selected_mode,
@@ -616,15 +711,22 @@ if generate_clicked:
                     style=selected_style,
                     length=selected_length,
                     custom_instructions=custom_instructions,
+                    material=material_task_config(effective_material),
                     api_key=api_key,
                     model=model,
                     thinking=thinking,
+                    reasoning_effort=reasoning_effort,
                     base_url=base_url,
+                    on_progress=progress_reporter(status, action),
                 )
+                status.update(label="正在排版长图…")
                 store_model_summary_result(
                     generated_result,
                     source_digest=current_source_digest,
                     request_fingerprint=current_request_fingerprint,
+                )
+                st.session_state.summary_generation_note = (
+                    f"思考 · {reasoning_effort}" if thinking else "快速 · 非思考"
                 )
             st.rerun()
         except SummaryError as error:
@@ -677,8 +779,8 @@ with proof_col:
                     st.markdown(f"- {issue.message}")
                 if not source_has_changed:
                     st.caption(
-                        "数字字面匹配只检查摘要数字能否在原文找到相同写法（忽略空格、逗号和"
-                        "全角百分号），不判断数字的上下文、主体或因果关系。"
+                        "数字检查只看摘要数字能否在原文找到相同写法或相同数值（会换算万、亿、"
+                        "million 等单位），不判断数字的上下文、主体或因果关系。"
                     )
             revise_clicked = st.button(
                 "按检查结果修订",
@@ -711,9 +813,11 @@ with proof_col:
                             style=selected_style,
                             length=selected_length,
                             custom_instructions=custom_instructions,
+                            material=material_task_config(effective_material),
                             api_key=api_key,
                             model=model,
                             thinking=thinking,
+                            reasoning_effort=reasoning_effort,
                             base_url=base_url,
                         )
                         store_model_summary_result(
@@ -729,6 +833,52 @@ with proof_col:
                     LOGGER.exception("Unexpected summary revision failure")
                     st.error(
                         f"摘要修订发生意外错误（{type(error).__name__}）。"
+                        "详细堆栈已写入 Streamlit Cloud 日志。"
+                    )
+        if selected_mode == "story" or material_kind == "transcript":
+            attribution_clicked = st.button(
+                "核对归属（谁说、谁指控谁）",
+                icon=":material/fact_check:",
+                width="stretch",
+                disabled=bool(not api_key or source_has_changed or request_is_stale),
+                key="summary-check-attribution",
+                help="让模型逐条回到原文核对主语、指控方与被指控方，只修改归属有问题的条目。",
+            )
+            if attribution_clicked:
+                try:
+                    action = "正在核对归属"
+                    with st.status(action, expanded=False) as status:
+                        revised_result = revise_summary_with_feedback(
+                            markdown_source,
+                            result.document,
+                            ("核对每条的主语、指控方与被指控方是否与原文一致。",),
+                            mode=selected_mode,
+                            language=language_options[language_label],
+                            style=selected_style,
+                            length=selected_length,
+                            custom_instructions=custom_instructions,
+                            material=material_task_config(effective_material),
+                            api_key=api_key,
+                            model=model,
+                            thinking=thinking,
+                            reasoning_effort=reasoning_effort,
+                            base_url=base_url,
+                            feedback_kind="attribution",
+                            on_progress=progress_reporter(status, action),
+                        )
+                        store_model_summary_result(
+                            revised_result,
+                            source_digest=current_source_digest,
+                            request_fingerprint=current_request_fingerprint,
+                            is_revision=True,
+                        )
+                    st.rerun()
+                except SummaryError as error:
+                    st.error(f"核对失败：{error}")
+                except Exception as error:
+                    LOGGER.exception("Unexpected attribution check failure")
+                    st.error(
+                        f"核对归属发生意外错误（{type(error).__name__}）。"
                         "详细堆栈已写入 Streamlit Cloud 日志。"
                     )
         if st.session_state.pop("summary_clear_user_feedback", False):
@@ -768,9 +918,11 @@ with proof_col:
                             style=selected_style,
                             length=selected_length,
                             custom_instructions=custom_instructions,
+                            material=material_task_config(effective_material),
                             api_key=api_key,
                             model=model,
                             thinking=thinking,
+                            reasoning_effort=reasoning_effort,
                             base_url=base_url,
                             feedback_kind="user",
                         )
@@ -864,10 +1016,10 @@ with proof_col:
             ):
                 try:
                     with st.spinner("正在排版长图…"):
-                        artifact = build_summary_long_image(result.document, "mobile")
+                        artifact = build_summary_long_image(result.document, "tablet")
                         st.session_state.summary_export = {
                             "digest": summary_digest,
-                            "mode": "mobile",
+                            "mode": "tablet",
                             "artifact": artifact,
                         }
                         st.session_state.pop("summary_export_error", None)
@@ -912,7 +1064,9 @@ with proof_col:
         with st.expander("生成信息"):
             revision_count = int(st.session_state.get("summary_revision_count", 0))
             revision_note = f" · 已修订 {revision_count} 次" if revision_count else ""
+            generation_note = st.session_state.get("summary_generation_note")
+            generation_note = f" · {generation_note}" if generation_note else ""
             st.caption(
-                f"{result.model} · {result.completion_tokens or '—'} 输出 Tokens · "
+                f"{result.model}{generation_note} · {result.completion_tokens or '—'} 输出 Tokens · "
                 f"{result.milliseconds / 1000:.1f} 秒{revision_note}"
             )

@@ -47,7 +47,7 @@ if __name__ == "__main__":
         target = output_dir / f"summary.{mode}.png"
         target.write_bytes(result.png)
         print(f"image {mode}: {result.width}×{result.height}px -> {target}")
-        expected_width = {"tablet": 1500, "mobile": 1227}[mode]
+        expected_width = {"tablet": 1488, "mobile": 1227}[mode]
         minimum_content_height = {"tablet": 900, "mobile": 900}[mode]
         if result.width != expected_width or result.height < minimum_content_height:
             raise SystemExit(f"summary image {mode} has unexpected dimensions")
