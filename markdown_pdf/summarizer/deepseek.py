@@ -6,7 +6,7 @@ import re
 import time
 from dataclasses import dataclass
 from http.client import HTTPException
-from typing import Any, Callable, Literal, Mapping
+from typing import Any, Callable, Generator, Literal, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -325,6 +325,23 @@ class SummaryResult:
     prompt_tokens: int
     completion_tokens: int
     milliseconds: int
+
+
+SummaryStep = Literal["summary", "budget", "quality", "attribution"]
+
+
+@dataclass(frozen=True)
+class SummaryRequest:
+    """One model call: whoever answers it (DeepSeek, or the calling agent) gets these messages."""
+
+    step: SummaryStep
+    messages: list[dict[str, str]]
+    max_tokens: int
+    note: str = ""
+
+
+# Yields requests, receives each reply's parsed document, returns the final document.
+SummarySteps = Generator[SummaryRequest, SummaryDocument, SummaryDocument]
 
 
 def build_messages(
@@ -697,6 +714,20 @@ def parse_summary_document(
     return SummaryDocument(title=title, byline=byline, lead=lead, sections=tuple(sections))
 
 
+def parse_summary_reply(content: str) -> SummaryDocument:
+    """A model's raw JSON reply (optionally fenced) → a validated document with capped highlights."""
+    cleaned = content.strip()
+    if cleaned.startswith("```json") and cleaned.endswith("```"):
+        cleaned = cleaned[7:-3].strip()
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as error:
+        raise SummaryError("模型没有返回有效的摘要 JSON，请重试。") from error
+    if not isinstance(parsed, Mapping):
+        raise SummaryError("模型没有返回有效的摘要对象，请重试。")
+    return limit_highlights(parse_summary_document(parsed))
+
+
 def _response_content(payload: dict[str, Any]) -> tuple[SummaryDocument, int, int]:
     if not isinstance(payload, Mapping):
         raise _RetryableResponseError("DeepSeek 返回了无法识别的响应。")
@@ -724,18 +755,8 @@ def _response_content(payload: dict[str, Any]) -> tuple[SummaryDocument, int, in
         raise SummaryError("摘要达到模型输出上限。请改用标准篇幅，或缩短原文后重试。")
     if not isinstance(content, str) or not content.strip():
         raise _RetryableResponseError("DeepSeek 返回了空摘要，请稍后重试。")
-
-    cleaned = content.strip()
-    if cleaned.startswith("```json") and cleaned.endswith("```"):
-        cleaned = cleaned[7:-3].strip()
     try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError as error:
-        raise _RetryableResponseError("DeepSeek 没有返回有效的摘要 JSON，请重试。") from error
-    if not isinstance(parsed, Mapping):
-        raise _RetryableResponseError("DeepSeek 没有返回有效的摘要对象，请重试。")
-    try:
-        document = parse_summary_document(parsed)
+        document = parse_summary_reply(content)
     except SummaryError as error:
         raise _RetryableResponseError(str(error)) from error
 
@@ -967,7 +988,7 @@ def _request_summary(
                 continue
             raise SummaryError(f"{error} 已自动重试一次。") from error
         return SummaryResult(
-            document=limit_highlights(document),
+            document=document,
             model=str(payload.get("model") or model),
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -1081,6 +1102,116 @@ def _check_source(markdown_source: str) -> str:
     return source
 
 
+def revision_request(
+    markdown_source: str,
+    draft_document: SummaryDocument,
+    feedback: list[str] | tuple[str, ...],
+    *,
+    step: SummaryStep,
+    mode: SummaryMode,
+    language: SummaryLanguage,
+    style: SummaryStyle = "direct",
+    length: SummaryLength = "normal",
+    custom_instructions: str = "",
+    material: Mapping[str, Any] | None = None,
+    note: str = "",
+) -> SummaryRequest:
+    return SummaryRequest(
+        step=step,
+        messages=build_revision_messages(
+            markdown_source,
+            draft_document,
+            feedback,
+            mode=mode,
+            language=language,
+            style=style,
+            length=length,
+            custom_instructions=custom_instructions,
+            material=material,
+            feedback_kind="attribution" if step == "attribution" else "quality",
+        ),
+        max_tokens=_MAX_OUTPUT_TOKENS[(mode, style, length)],
+        note=note,
+    )
+
+
+def summary_steps(
+    markdown_source: str,
+    *,
+    mode: SummaryMode,
+    language: SummaryLanguage,
+    style: SummaryStyle = "direct",
+    length: SummaryLength = "normal",
+    custom_instructions: str = "",
+    material: Mapping[str, Any] | None = None,
+    enforce_budget: bool = True,
+) -> SummarySteps:
+    """The summary as a sequence of model calls: the first draft, then up to two compression passes."""
+    source = _check_source(markdown_source)
+    task = dict(
+        mode=mode, language=language, style=style, length=length,
+        custom_instructions=custom_instructions, material=material,
+    )
+    document = yield SummaryRequest(
+        step="summary",
+        messages=build_messages(source, **task),
+        max_tokens=_MAX_OUTPUT_TOKENS[(mode, style, length)],
+    )
+    for _ in range(MAX_COMPRESSION_PASSES if enforce_budget else 0):
+        feedback = budget_feedback(document, mode=mode, style=style, length=length)
+        if feedback is None:
+            break
+        # Models treat prose budgets as suggestions; a targeted compression pass keeps the card readable.
+        document = yield revision_request(
+            source, document, [feedback], step="budget", note=feedback.split("。")[0], **task
+        )
+    return verify_byline(document, source, material)
+
+
+def run_summary_steps(
+    steps: SummarySteps,
+    *,
+    api_key: str,
+    model: str = DEFAULT_MODEL,
+    thinking: bool = True,
+    reasoning_effort: ReasoningEffort = "high",
+    base_url: str = DEFAULT_BASE_URL,
+    timeout: int = 180,
+    deadline_seconds: float | None = None,
+    on_progress: ProgressCallback | None = None,
+    on_step: Callable[[SummaryRequest], None] | None = None,
+) -> SummaryResult:
+    """Answer each step with DeepSeek; usage is summed across calls."""
+    total: SummaryResult | None = None
+    request = next(steps)
+    while True:
+        if on_step:
+            on_step(request)
+        result = _request_summary(
+            request.messages,
+            max_tokens=request.max_tokens,
+            api_key=api_key,
+            model=model,
+            thinking=thinking,
+            reasoning_effort=reasoning_effort,
+            base_url=base_url,
+            timeout=timeout,
+            deadline_seconds=deadline_seconds,
+            on_progress=on_progress,
+        )
+        total = result if total is None else _merge_usage(total, result)
+        try:
+            request = steps.send(result.document)
+        except StopIteration as finished:
+            return SummaryResult(
+                document=finished.value,
+                model=total.model,
+                prompt_tokens=total.prompt_tokens,
+                completion_tokens=total.completion_tokens,
+                milliseconds=total.milliseconds,
+            )
+
+
 def summarize_markdown(
     markdown_source: str,
     *,
@@ -1100,18 +1231,17 @@ def summarize_markdown(
     on_progress: ProgressCallback | None = None,
     enforce_budget: bool = True,
 ) -> SummaryResult:
-    source = _check_source(markdown_source)
-    result = _request_summary(
-        build_messages(
-            source,
+    return run_summary_steps(
+        summary_steps(
+            markdown_source,
             mode=mode,
             language=language,
             style=style,
             length=length,
             custom_instructions=custom_instructions,
             material=material,
+            enforce_budget=enforce_budget,
         ),
-        max_tokens=_MAX_OUTPUT_TOKENS[(mode, style, length)],
         api_key=api_key,
         model=model,
         thinking=thinking,
@@ -1120,37 +1250,6 @@ def summarize_markdown(
         timeout=timeout,
         deadline_seconds=deadline_seconds,
         on_progress=on_progress,
-    )
-    for _ in range(MAX_COMPRESSION_PASSES if enforce_budget else 0):
-        feedback = budget_feedback(result.document, mode=mode, style=style, length=length)
-        if feedback is None:
-            break
-        # Models treat prose budgets as suggestions; a targeted compression pass keeps the card readable.
-        result = _merge_usage(result, revise_summary_with_feedback(
-            source,
-            result.document,
-            [feedback],
-        mode=mode,
-        language=language,
-        style=style,
-        length=length,
-        custom_instructions=custom_instructions,
-        material=material,
-        api_key=api_key,
-        model=model,
-        thinking=thinking,
-        reasoning_effort=reasoning_effort,
-        base_url=base_url,
-        timeout=timeout,
-            deadline_seconds=deadline_seconds,
-            on_progress=on_progress,
-        ))
-    return SummaryResult(
-        document=verify_byline(result.document, source, material),
-        model=result.model,
-        prompt_tokens=result.prompt_tokens,
-        completion_tokens=result.completion_tokens,
-        milliseconds=result.milliseconds,
     )
 
 

@@ -128,6 +128,8 @@ pbpaste | python summarize_cli.py - --mode standard --effort none
 
 `--mode auto|standard|story|howto|section`，`--effort auto|none|low|high|max`（auto 与页面的“自动”一致），`--lang auto|source|zh|en`（auto：非中文字幕默认简体中文），`--check-attribution` 运行一次归属核对，`--save-source` 同时保存读取到的原文或字幕。
 
+`--engine session` 不调用 DeepSeek，而是把每次模型调用写成任务文件夹 `<名称>.session/` 里的 `request-N.md`（与 API 相同的提示词，原文单独放在 `source.md`），交给调用它的智能体（例如 Claude Code）作答：把 JSON 回复存成 `reply-N.json`，再运行 `python summarize_cli.py --resume <任务文件夹>`。压缩、修订与归属核对照常进行，全部回答后写出结果并删除任务文件夹。
+
 macOS 会自动寻找 `/Applications/Google Chrome.app`。Linux 默认寻找 `chromium`。也可以通过 `CHROMIUM_PATH` 指定浏览器可执行文件。
 
 ## 部署到 Streamlit Community Cloud

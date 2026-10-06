@@ -1,4 +1,4 @@
-"""Small DeepSeek-backed Markdown summarizer."""
+"""Small DeepSeek-backed Markdown summarizer (the session engine hands the same calls to an agent)."""
 
 from .deepseek import (
     budget_feedback,
@@ -31,6 +31,7 @@ from .deepseek import (
     SummaryError,
     SummaryDocument,
     SummaryItem,
+    SummaryRequest,
     SummaryResult,
     SummarySection,
     build_messages,
@@ -38,9 +39,15 @@ from .deepseek import (
     build_revision_messages,
     build_request_fingerprint,
     parse_summary_document,
+    parse_summary_reply,
     revise_summary_with_feedback,
+    revision_request,
+    run_summary_steps,
     summarize_markdown,
+    summary_steps,
 )
+from .session import SessionJob
+from .workflow import summary_workflow
 from .quality import (
     SummaryQualityIssue,
     SummaryQualityReport,
@@ -79,6 +86,8 @@ __all__ = [
     "SummaryError",
     "SummaryDocument",
     "SummaryItem",
+    "SessionJob",
+    "SummaryRequest",
     "SummaryResult",
     "SummarySection",
     "SummaryQualityIssue",
@@ -88,8 +97,13 @@ __all__ = [
     "build_revision_messages",
     "build_request_fingerprint",
     "parse_summary_document",
+    "parse_summary_reply",
     "extract_numeric_tokens",
     "lint_summary_document",
     "revise_summary_with_feedback",
+    "revision_request",
+    "run_summary_steps",
     "summarize_markdown",
+    "summary_steps",
+    "summary_workflow",
 ]
