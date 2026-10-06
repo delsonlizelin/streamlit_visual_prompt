@@ -190,7 +190,8 @@ def main() -> int:
 
     settings = load_local_settings()
     if args.engine == "deepseek" and not settings.api_key:
-        print("error: no DEEPSEEK_API_KEY in the environment or .streamlit/secrets.toml", file=sys.stderr)
+        print("error: no DEEPSEEK_API_KEY in the environment or .streamlit/secrets.toml "
+              "(or use --engine session to have the calling agent write the summary)", file=sys.stderr)
         return 2
 
     try:
