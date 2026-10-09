@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import sys
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
@@ -59,6 +60,24 @@ class StreamlitEntrypointTests(unittest.TestCase):
 
         self.assertEqual(list(app.exception), [])
         self.assertTrue(hasattr(stale_backend, "STYLE_LABELS"))
+
+    def test_summary_page_repairs_backend_before_fresh_settings_import(self) -> None:
+        # Settings can be imported for the first time while Cloud retains the
+        # backend from before resolve_model and the session engine were added.
+        stale_backend = ModuleType("summarizer.deepseek")
+        stale_backend.__dict__.update(summarizer_backend.__dict__)
+        for name in ("resolve_model", "SummaryRequest", "summary_steps"):
+            stale_backend.__dict__.pop(name, None)
+        with patch.dict("sys.modules", {"summarizer.deepseek": stale_backend}):
+            sys.modules.pop("app_settings", None)
+            app = AppTest.from_file(
+                APP_ROOT / "pages" / "2_文章摘要.py",
+                default_timeout=10,
+            ).run()
+
+        self.assertEqual(list(app.exception), [])
+        self.assertTrue(callable(stale_backend.resolve_model))
+        self.assertTrue(hasattr(stale_backend, "SummaryRequest"))
 
     def test_summary_page_accepts_url_backend_without_paste_helper(self) -> None:
         stale_backend = ModuleType("url_documents")

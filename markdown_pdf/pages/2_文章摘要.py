@@ -5,11 +5,55 @@ import importlib
 import json
 import logging
 import re
+import sys
 from urllib.parse import urlsplit
 
 import streamlit as st
 
 from dataclasses import asdict
+
+SUMMARIZER_SYMBOLS = (
+    "DEFAULT_BASE_URL",
+    "DEFAULT_MODEL",
+    "resolve_model",
+    "SummaryItem",
+    "SummarySection",
+    "SummaryRequest",
+    "SummarySteps",
+    "summary_steps",
+    "revision_request",
+    "run_summary_steps",
+    "verify_byline",
+    "GENERATION_CAPTIONS",
+    "GENERATION_LABELS",
+    "LENGTH_LABELS",
+    "LENGTH_CAPTIONS",
+    "LENGTH_TARGETS",
+    "MAX_CUSTOM_INSTRUCTION_CHARACTERS",
+    "MAX_SOURCE_CHARACTERS",
+    "MODE_LABELS",
+    "MODE_CAPTIONS",
+    "STYLE_LABELS",
+    "STYLE_CAPTIONS",
+    "SummaryDocument",
+    "SummaryError",
+    "SummaryResult",
+    "build_prompt_template",
+    "build_request_fingerprint",
+    "parse_summary_document",
+    "resolve_generation",
+    "revise_summary_with_feedback",
+    "summarize_markdown",
+)
+# Repair a cached backend before importing settings, renderers, quality helpers,
+# or the package's re-exports: each can import backend symbols at module load time.
+summarizer_backend = sys.modules.get("summarizer.deepseek")
+if summarizer_backend is not None and not all(
+    hasattr(summarizer_backend, name) for name in SUMMARIZER_SYMBOLS
+):
+    importlib.reload(summarizer_backend)
+summarizer_backend = importlib.import_module("summarizer.deepseek")
+
 
 import ui_components
 from longread_pdf import RenderError, render_summary_long_image
@@ -50,34 +94,6 @@ app_settings = importlib.import_module("app_settings")
 if not hasattr(app_settings, "resolve_settings"):
     app_settings = importlib.reload(app_settings)
 
-
-SUMMARIZER_SYMBOLS = (
-    "DEFAULT_BASE_URL",
-    "DEFAULT_MODEL",
-    "GENERATION_CAPTIONS",
-    "GENERATION_LABELS",
-    "LENGTH_LABELS",
-    "LENGTH_CAPTIONS",
-    "LENGTH_TARGETS",
-    "MAX_CUSTOM_INSTRUCTION_CHARACTERS",
-    "MAX_SOURCE_CHARACTERS",
-    "MODE_LABELS",
-    "MODE_CAPTIONS",
-    "STYLE_LABELS",
-    "STYLE_CAPTIONS",
-    "SummaryDocument",
-    "SummaryError",
-    "SummaryResult",
-    "build_prompt_template",
-    "build_request_fingerprint",
-    "parse_summary_document",
-    "resolve_generation",
-    "revise_summary_with_feedback",
-    "summarize_markdown",
-)
-summarizer_backend = importlib.import_module("summarizer.deepseek")
-if not all(hasattr(summarizer_backend, name) for name in SUMMARIZER_SYMBOLS):
-    summarizer_backend = importlib.reload(summarizer_backend)
 
 DEFAULT_BASE_URL = summarizer_backend.DEFAULT_BASE_URL
 DEFAULT_MODEL = summarizer_backend.DEFAULT_MODEL
