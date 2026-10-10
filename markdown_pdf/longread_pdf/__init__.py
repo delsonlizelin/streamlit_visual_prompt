@@ -4,6 +4,7 @@ from .gpt_prompt import GPT_MARKDOWN_PROMPT
 from .preflight import PreflightIssue, PreflightReport, preflight_markdown
 from .renderer import (
     LongImageResult,
+    LongImageTooTall,
     RenderError,
     RenderResult,
     build_document,
@@ -17,6 +18,7 @@ __all__ = [
     "PreflightReport",
     "GPT_MARKDOWN_PROMPT",
     "LongImageResult",
+    "LongImageTooTall",
     "RenderError",
     "RenderResult",
     "build_document",

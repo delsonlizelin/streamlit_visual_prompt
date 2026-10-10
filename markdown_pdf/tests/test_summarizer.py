@@ -907,6 +907,31 @@ class RedesignTests(unittest.TestCase):
                     self.assertIn((mode, style, length), LENGTH_TARGETS)
                     self.assertIn((mode, style, length), _MAX_OUTPUT_TOKENS)
 
+    def test_full_length_drops_the_budget(self):
+        from summarizer.deepseek import (
+            LENGTH_TARGETS, _MAX_OUTPUT_TOKENS, SummaryDocument, SummaryItem, SummarySection,
+            budget_feedback, summary_steps,
+        )
+
+        for mode in ("standard", "story", "howto", "section"):
+            for style in ("direct", "beginner"):
+                self.assertIn((mode, style, "full"), LENGTH_TARGETS)
+                self.assertIn((mode, style, "full"), _MAX_OUTPUT_TOKENS)
+        content = build_messages("# 标题", mode="section", language="zh", length="full")[1]["content"]
+        self.assertIn("完整覆盖", content)
+        self.assertIn("不设上限", content)
+        self.assertIn("全篇最多 10 节", content)
+        sections = tuple(
+            SummarySection(f"第{i}节", tuple(SummaryItem("很长的论点" * 20) for _ in range(8))) for i in range(20)
+        )
+        long_doc = SummaryDocument("长访谈", None, None, sections)
+        self.assertIsNone(budget_feedback(long_doc, mode="section", style="direct", length="full"))
+        self.assertIsNotNone(budget_feedback(long_doc, mode="section", style="direct", length="detailed"))
+        steps = summary_steps("# 标题\n\n正文" * 50, mode="section", language="zh", length="full")
+        self.assertEqual(next(steps).step, "summary")
+        with self.assertRaises(StopIteration):
+            steps.send(long_doc)
+
     def test_material_is_sent_as_task_config(self):
         material = {"kind": "transcript", "origin": "youtube", "asr": True, "author": "Channel"}
         content = build_messages("# 标题", mode="story", language="zh", material=material)[1]["content"]

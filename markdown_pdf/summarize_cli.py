@@ -17,6 +17,7 @@ the agent writes each reply and runs `--resume` until the outputs are written.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
 from pathlib import Path
 import shutil
@@ -83,6 +84,45 @@ def print_step(request: SummaryRequest) -> None:
         print(f"{request.step}: {request.note}" if request.note else request.step, file=sys.stderr)
 
 
+def split_document(document: SummaryDocument) -> tuple[SummaryDocument, SummaryDocument]:
+    """Halve at a section boundary, or within the only section's items (the second half marked 续)."""
+    sections = document.sections
+    if len(sections) > 1:
+        middle = len(sections) // 2
+        return replace(document, sections=sections[:middle]), replace(document, lead=None, sections=sections[middle:])
+    (section,) = sections
+    if len(section.items) < 2:
+        from longread_pdf import LongImageTooTall
+
+        raise LongImageTooTall("单个条目过长，无法导出为长图。")
+    middle = len(section.items) // 2
+    first = replace(section, items=section.items[:middle])
+    second = replace(section, heading=f"{section.heading}（续）", items=section.items[middle:])
+    return replace(document, sections=(first,)), replace(document, lead=None, sections=(second,))
+
+
+def render_image_parts(document: SummaryDocument, *, mode: str) -> list[bytes]:
+    """One long image, or several numbered parts when the summary is too tall for one (--length full)."""
+    from longread_pdf import LongImageTooTall, render_summary_long_image
+
+    def render(part: SummaryDocument) -> list[SummaryDocument]:
+        try:
+            render_summary_long_image(part, mode=mode)
+            return [part]
+        except LongImageTooTall:
+            first, second = split_document(part)
+            return render(first) + render(second)
+
+    parts = render(document)
+    if len(parts) == 1:
+        return [render_summary_long_image(document, mode=mode).png]
+    total = len(parts)
+    return [
+        render_summary_long_image(replace(part, title=f"{document.title}（{index}/{total}）"), mode=mode).png
+        for index, part in enumerate(parts, start=1)
+    ]
+
+
 def write_outputs(document: SummaryDocument, source_text: str, output: Mapping[str, Any]) -> int:
     """Lint, then write the requested formats; shared by both engines."""
     for issue in lint_summary_document(document, source_text).issues:
@@ -99,16 +139,19 @@ def write_outputs(document: SummaryDocument, source_text: str, output: Mapping[s
         target.write_text(document.to_markdown(), "utf-8")
         written.append(target)
     if "png" in output["formats"]:
-        from longread_pdf import RenderError, render_summary_long_image
+        from longread_pdf import RenderError
 
         try:
-            image = render_summary_long_image(document, mode=output["image_mode"])
+            images = render_image_parts(document, mode=output["image_mode"])
         except RenderError as error:
             print(f"render error: {error}", file=sys.stderr)
             return 1
-        target = out_dir / f"{stem}.summary.png"
-        target.write_bytes(image.png)
-        written.append(target)
+        if len(images) > 1:
+            print(f"  image: too tall for one long image, split into {len(images)} parts", file=sys.stderr)
+        for index, png in enumerate(images, start=1):
+            target = out_dir / (f"{stem}.summary.png" if len(images) == 1 else f"{stem}.summary.part{index}.png")
+            target.write_bytes(png)
+            written.append(target)
     for path in written:
         print(path)
     return 0
@@ -149,7 +192,8 @@ def main() -> int:
                         help="auto = suggest from the material; standard 先看结论 (结论是什么); story 来龙去脉 "
                              "(发生了什么); howto 上手步骤 (怎么做); section 逐章梳理 (每章讲什么)")
     parser.add_argument("--style", choices=("direct", "beginner"), default="direct")
-    parser.add_argument("--length", choices=("normal", "detailed"), default="normal")
+    parser.add_argument("--length", choices=("normal", "detailed", "full"), default="normal",
+                        help="full = no length cap or compression passes (long interviews, courses); CLI only")
     parser.add_argument("--lang", choices=("auto", "source", "zh", "en"), default="auto",
                         help="auto = 简体中文 for non-Chinese transcripts, otherwise follow the source")
     parser.add_argument("--material", choices=("auto", "article", "document", "transcript"), default="auto",

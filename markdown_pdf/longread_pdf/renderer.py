@@ -86,6 +86,10 @@ class RenderError(RuntimeError):
     """A user-facing rendering error."""
 
 
+class LongImageTooTall(RenderError):
+    """The summary is taller than one long image can hold; callers may split it."""
+
+
 @dataclass(frozen=True)
 class DocumentBuild:
     html: str
@@ -736,7 +740,7 @@ def render_summary_long_image(
                     if int(geometry["horizontalOverflow"]) > 2:
                         raise RenderError("长图内容发生横向溢出，请检查摘要中的长链接或复杂内容。")
                     if int(geometry["height"]) > MAX_LONG_IMAGE_CSS_HEIGHT:
-                        raise RenderError(
+                        raise LongImageTooTall(
                             "摘要过长，无法稳定导出为单张长图；请缩短原文，"
                             "或改用标准篇幅后重试。"
                         )

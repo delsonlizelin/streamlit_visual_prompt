@@ -13,7 +13,7 @@ from urllib.request import Request, urlopen
 
 SummaryMode = Literal["standard", "story", "howto", "section"]
 SummaryStyle = Literal["direct", "beginner"]
-SummaryLength = Literal["normal", "detailed"]
+SummaryLength = Literal["normal", "detailed", "full"]
 SummaryLanguage = Literal["source", "zh", "en"]
 ReasoningEffort = Literal["low", "high", "max"]
 
@@ -33,6 +33,7 @@ GenerationChoice = Literal["auto", "fast", "careful"]
 ProgressCallback = Callable[[float, int, int], None]
 MAX_SOURCE_CHARACTERS = 300_000
 MAX_CUSTOM_INSTRUCTION_CHARACTERS = 4_000
+MAX_SECTIONS = 10
 MAX_ITEMS_PER_SECTION = 32
 MAX_TOTAL_ITEMS = 160
 PROMPT_VERSION = "2026-10-05.6"
@@ -124,16 +125,25 @@ LENGTH_INSTRUCTIONS: dict[SummaryLength, str] = {
         "详细展开：比同一篇的标准版更长。在已有分区里保留更多支撑结论的论据、数据、例子、因果过程、不同立"
         "场和限制条件，把容易跳过的推理步骤写清楚；不增加与主线无关的分区，信息不足时不凑字数。"
     ),
+    "full": (
+        "完整覆盖：本次不设篇幅上限，用于长访谈、长课程等需要不漏话题的材料。structure 指令里的节数、条数和"
+        "篇幅上限，以及系统规则中“篇幅是上限、摘要远短于原文”的要求本次不适用；按原文顺序覆盖每一个实质话题"
+        f"或章节，保留各自的论点、理由、例子、数字和限制条件，条数随信息量增加；全篇最多 {MAX_SECTIONS} 节、每节不超过 "
+        f"{MAX_ITEMS_PER_SECTION} 条，话题多时合并相邻章节、加长分区。单条仍不超过 150 字，"
+        "lead 仍按 structure 的长度；只删寒暄、口水话、重复和广告推广，不重复、不虚构、不凑字数。"
+    ),
 }
 
 LENGTH_LABELS: dict[SummaryLength, str] = {
     "normal": "标准篇幅（推荐）",
     "detailed": "详细展开",
+    "full": "完整覆盖",
 }
 
 LENGTH_CAPTIONS: dict[SummaryLength, str] = {
     "normal": "保留主要结论与必要依据 · 篇幅随信息量调整",
     "detailed": "展开更多论据、数据、例子、限制和推理过程",
+    "full": "不设篇幅上限 · 按原文顺序覆盖所有话题",
 }
 
 LENGTH_TARGETS: dict[
@@ -155,6 +165,11 @@ LENGTH_TARGETS: dict[
     ("howto", "beginner", "normal"): ("800–1,300 字", "500–800 words"),
     ("howto", "direct", "detailed"): ("1,000–1,800 字", "650–1,100 words"),
     ("howto", "beginner", "detailed"): ("1,600–2,600 字", "1,000–1,600 words"),
+    **{
+        (mode, style, "full"): ("不设上限", "no limit")
+        for mode in ("standard", "story", "howto", "section")
+        for style in ("direct", "beginner")
+    },
 }
 
 # JSON Output can be truncated without a sufficiently generous API ceiling. These
@@ -177,6 +192,11 @@ _MAX_OUTPUT_TOKENS: dict[tuple[SummaryMode, SummaryStyle, SummaryLength], int] =
     ("howto", "beginner", "normal"): 5_000,
     ("howto", "direct", "detailed"): 7_000,
     ("howto", "beginner", "detailed"): 10_000,
+    **{
+        (mode, style, "full"): 48_000
+        for mode in ("standard", "story", "howto", "section")
+        for style in ("direct", "beginner")
+    },
 }
 
 LANGUAGE_INSTRUCTIONS: dict[SummaryLanguage, str] = {
@@ -369,7 +389,9 @@ def build_messages(
         )
     chinese_target, english_target = LENGTH_TARGETS[(mode, style, length)]
     target_instruction = (
-        f"篇幅目标：若输出中文，约 {chinese_target}；若输出英文，约 {english_target}；"
+        "篇幅目标：不设上限，长度由原文的实质信息量决定；不得重复或虚构内容凑字数。"
+        if length == "full"
+        else f"篇幅目标：若输出中文，约 {chinese_target}；若输出英文，约 {english_target}；"
         "其他语言采用相近的信息密度。原文很短或有效信息不足时可以少于下限，不得重复或虚构内容凑字数。"
     )
     payload = {
@@ -671,7 +693,7 @@ def parse_summary_document(
     raw_sections = value.get("sections")
     if not isinstance(raw_sections, list) or not raw_sections:
         raise SummaryError("DeepSeek 响应中缺少有效的摘要分区，请重试。")
-    if len(raw_sections) > 10:
+    if len(raw_sections) > MAX_SECTIONS:
         raise SummaryError("DeepSeek 返回的摘要分区过多，请重试。")
 
     sections: list[SummarySection] = []
@@ -1028,6 +1050,8 @@ def budget_feedback(
     document: SummaryDocument, *, mode: SummaryMode, style: SummaryStyle, length: SummaryLength
 ) -> str | None:
     """A compression instruction when the summary overshoots its budget or structure ceilings."""
+    if length == "full":
+        return None
     size, english = summary_size(document)
     ceiling = _budget_ceiling(mode, style, length, english=english)
     max_sections, max_items, max_lead = MODE_CEILINGS[mode]
