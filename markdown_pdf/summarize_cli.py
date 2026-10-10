@@ -138,6 +138,17 @@ def render_image_parts(document: SummaryDocument, *, mode: str, split: str = "au
     ]
 
 
+def write_images_pdf(images: list[bytes], target: Path) -> None:
+    """All image parts as one PDF, one part per page, each page sized to its image."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    pages = [Image.open(BytesIO(png)).convert("RGB") for png in images]
+    # 2x renders at 192 dpi keep the page at its CSS size (744 px wide → about 26 cm).
+    pages[0].save(target, "PDF", save_all=True, append_images=pages[1:], resolution=192)
+
+
 def write_outputs(document: SummaryDocument, source_text: str, output: Mapping[str, Any]) -> int:
     """Lint, then write the requested formats; shared by both engines."""
     for issue in lint_summary_document(document, source_text).issues:
@@ -168,6 +179,10 @@ def write_outputs(document: SummaryDocument, source_text: str, output: Mapping[s
         for index, png in enumerate(images, start=1):
             target = out_dir / (f"{stem}.summary.png" if len(images) == 1 else f"{stem}.summary.part{index}.png")
             target.write_bytes(png)
+            written.append(target)
+        if len(images) > 1:
+            target = out_dir / f"{stem}.summary.pdf"
+            write_images_pdf(images, target)
             written.append(target)
     for path in written:
         print(path)
