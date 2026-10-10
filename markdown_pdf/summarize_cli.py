@@ -101,9 +101,24 @@ def split_document(document: SummaryDocument) -> tuple[SummaryDocument, SummaryD
     return replace(document, sections=(first,)), replace(document, lead=None, sections=(second,))
 
 
-def render_image_parts(document: SummaryDocument, *, mode: str) -> list[bytes]:
-    """One long image, or several numbered parts when the summary is too tall for one (--length full)."""
+def render_image_parts(document: SummaryDocument, *, mode: str, split: str = "auto") -> list[bytes]:
+    """One long image, or numbered parts: one per section (split="section"), or as many as needed when too tall."""
     from longread_pdf import LongImageTooTall, render_summary_long_image
+
+    if split == "section" and len(document.sections) > 1:
+        total = len(document.sections)
+        return [
+            render_summary_long_image(
+                replace(
+                    document,
+                    title=f"{document.title}（{index}/{total}）",
+                    lead=document.lead if index == 1 else None,
+                    sections=(section,),
+                ),
+                mode=mode,
+            ).png
+            for index, section in enumerate(document.sections, start=1)
+        ]
 
     def render(part: SummaryDocument) -> list[SummaryDocument]:
         try:
@@ -142,12 +157,14 @@ def write_outputs(document: SummaryDocument, source_text: str, output: Mapping[s
         from longread_pdf import RenderError
 
         try:
-            images = render_image_parts(document, mode=output["image_mode"])
+            images = render_image_parts(
+                document, mode=output["image_mode"], split=output.get("image_split", "auto")
+            )
         except RenderError as error:
             print(f"render error: {error}", file=sys.stderr)
             return 1
         if len(images) > 1:
-            print(f"  image: too tall for one long image, split into {len(images)} parts", file=sys.stderr)
+            print(f"  image: {len(images)} parts", file=sys.stderr)
         for index, png in enumerate(images, start=1):
             target = out_dir / (f"{stem}.summary.png" if len(images) == 1 else f"{stem}.summary.part{index}.png")
             target.write_bytes(png)
@@ -211,6 +228,8 @@ def main() -> int:
     parser.add_argument("--formats", default="md,png",
                         help=f"comma-separated subset of {','.join(FORMATS)}")
     parser.add_argument("--image-mode", choices=("tablet", "mobile"), default="tablet")
+    parser.add_argument("--image-split", choices=("auto", "section"), default="auto",
+                        help="auto = one image unless too tall; section = one image per section")
     parser.add_argument("--save-source", action="store_true",
                         help="also write the loaded source text (e.g. a YouTube transcript) as <name>.source.md")
     args = parser.parse_args()
@@ -269,7 +288,8 @@ def main() -> int:
         custom_instructions=args.instructions, material=material_task_config(material),
     )
     flags = dict(revise=args.revise, check_attribution=args.check_attribution)
-    output = dict(out_dir=str(out_dir), stem=stem, formats=formats, image_mode=args.image_mode)
+    output = dict(out_dir=str(out_dir), stem=stem, formats=formats, image_mode=args.image_mode,
+                  image_split=args.image_split)
     notices = f" · {' · '.join(source.notices)}" if source.notices else ""
     print(f"source: {source.title} · {KIND_LABELS[material.kind]}{notices} · {source.characters:,} chars", file=sys.stderr)
     if args.save_source:
