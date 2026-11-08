@@ -229,12 +229,23 @@ class StreamlitEntrypointTests(unittest.TestCase):
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
         self.assertIn('artifact = build_summary_long_image(result.document, "tablet")', source)
         self.assertIn("store_model_summary_result", source)
-        self.assertIn("native_image_share", source)
-        self.assertIn("长按保存", source)
+        # The image is no longer base64-packed into a component message; the
+        # preview itself is the share surface on mobile.
+        self.assertNotIn("native_image_share", source)
+        self.assertIn('st.image(artifact.png, width="stretch", output_format="PNG")', source)
+        self.assertIn("长按图片", source)
         self.assertIn('"下载 Markdown"', source)
         self.assertIn("to_markdown()", source)
         self.assertNotIn('"发送到 Markdown PDF"', source)
         self.assertNotIn("build_summary_pdf", source)
+
+    def test_shell_font_url_survives_the_cloud_app_prefix(self) -> None:
+        source = (APP_ROOT / "ui_components.py").read_text(encoding="utf-8")
+        self.assertIn(
+            'url("app/static/fonts/NotoSansSC-VariableFont_wght.ttf")',
+            source,
+        )
+        self.assertNotIn('url("/app/static/fonts/', source)
 
     def test_summary_page_exposes_local_editor_and_quality_check(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")

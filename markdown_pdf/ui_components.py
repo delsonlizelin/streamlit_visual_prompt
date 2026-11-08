@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import inspect
 import json
 import re
@@ -95,73 +94,6 @@ _AUTO_ARTICLE_URL_INPUT = _component_v2(
 )
 
 
-_NATIVE_IMAGE_SHARE = _component_v2(
-    "native_image_share",
-    html="""
-      <button type="button" hidden>分享长图</button>
-      <p role="status" aria-live="polite"></p>
-    """,
-    css="""
-      :host { display: block; }
-      button {
-        width: 100%;
-        min-height: 42px;
-        padding: .5rem 1rem;
-        border: 1px solid var(--st-border-color);
-        border-radius: var(--st-base-radius);
-        background: var(--st-background-color);
-        color: var(--st-text-color);
-        font: 500 .9rem/1.4 var(--st-font);
-        cursor: pointer;
-      }
-      button:active { background: var(--st-secondary-background-color); }
-      p {
-        margin: .35rem 0 0;
-        color: var(--st-text-color);
-        opacity: .72;
-        font: 400 .8rem/1.4 var(--st-font);
-      }
-      p:empty { display: none; }
-      @media (pointer: coarse) { button { min-height: 44px; } }
-    """,
-    js="""
-      export default function(component) {
-        const { parentElement, data } = component;
-        const button = parentElement.querySelector("button");
-        const status = parentElement.querySelector('[role="status"]');
-        const supported = typeof navigator.share === "function" &&
-          typeof window.File === "function";
-        button.hidden = !supported;
-
-        const share = async () => {
-          status.textContent = "";
-          try {
-            const binary = window.atob(data.base64);
-            const bytes = new Uint8Array(binary.length);
-            for (let index = 0; index < binary.length; index += 1) {
-              bytes[index] = binary.charCodeAt(index);
-            }
-            const file = new File([bytes], data.filename, { type: "image/png" });
-            if (navigator.canShare && !navigator.canShare({ files: [file] })) {
-              throw new Error("file-sharing-unavailable");
-            }
-            await navigator.share({
-              files: [file],
-              title: data.title,
-            });
-          } catch (error) {
-            if (error?.name !== "AbortError") {
-              status.textContent = "无法调出分享菜单，请长按图片或使用下载按钮。";
-            }
-          }
-        };
-        button.addEventListener("click", share);
-        return () => button.removeEventListener("click", share);
-      }
-    """,
-)
-
-
 def auto_article_url_input(
     value: str,
     *,
@@ -187,20 +119,6 @@ def auto_article_url_input(
     return str(result.url or "").strip()
 
 
-def native_image_share(png: bytes, filename: str, *, key: str) -> None:
-    """Show the native file share action when the browser supports Web Share."""
-    if _NATIVE_IMAGE_SHARE is None:
-        return
-    _NATIVE_IMAGE_SHARE(
-        data={
-            "base64": base64.b64encode(png).decode("ascii"),
-            "filename": filename,
-            "title": "文章摘要长图",
-        },
-        key=key,
-    )
-
-
 def compatible_file_uploader(label: str, *, max_upload_size: int, **kwargs):  # noqa: ANN003
     """Use per-widget upload limits when the installed Streamlit supports them."""
     parameters = inspect.signature(st.file_uploader).parameters
@@ -216,7 +134,7 @@ def page_shell_styles() -> None:
         <style>
           @font-face {
             font-family: "Noto Sans SC";
-            src: url("/app/static/fonts/NotoSansSC-VariableFont_wght.ttf") format("truetype");
+            src: url("app/static/fonts/NotoSansSC-VariableFont_wght.ttf") format("truetype");
             font-style: normal;
             font-weight: 100 900;
             font-display: swap;

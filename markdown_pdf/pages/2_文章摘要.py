@@ -475,11 +475,6 @@ auto_article_url_input = getattr(
     "auto_article_url_input",
     lambda value, key: st.text_input("文章网址", value=value, key=key),
 )
-native_image_share = getattr(
-    ui_components,
-    "native_image_share",
-    lambda png, filename, key: None,
-)
 compatible_file_uploader = getattr(
     ui_components,
     "compatible_file_uploader",
@@ -1087,15 +1082,7 @@ with proof_col:
                     stale=True,
                 )
             else:
-                action_col, download_col = st.columns(2, gap="medium")
-                with action_col:
-                    native_image_share(
-                        artifact.png,
-                        f"{output_name}.summary.png",
-                        key="summary-native-image-share",
-                    )
-                with download_col:
-                    long_image_download_button(export, key="summary-export-download-inline")
+                long_image_download_button(export, key="summary-export-download-inline")
             st.download_button(
                 "下载 Markdown",
                 data=result.document.to_markdown().encode("utf-8"),
@@ -1111,10 +1098,12 @@ with proof_col:
                 + (
                     "这是上一版结果；可保留或下载，更新请重新生成。"
                     if request_is_stale
-                    else "可分享、下载或长按保存。"
+                    else "可下载 PNG，或在手机上长按图片保存、转发。"
                 )
             )
-            st.image(artifact.png, width="stretch")
+            # Keep the preview a PNG: the default "auto" format re-encodes an
+            # opaque long image as JPEG, so long-press saves were not PNG.
+            st.image(artifact.png, width="stretch", output_format="PNG")
 
         with st.expander("生成信息"):
             revision_count = int(st.session_state.get("summary_revision_count", 0))
