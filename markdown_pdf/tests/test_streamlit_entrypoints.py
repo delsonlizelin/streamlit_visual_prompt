@@ -229,10 +229,14 @@ class StreamlitEntrypointTests(unittest.TestCase):
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
         self.assertIn('artifact = build_summary_long_image(result.document, "tablet")', source)
         self.assertIn("store_model_summary_result", source)
-        # The image is no longer base64-packed into a component message; the
-        # preview itself is the share surface on mobile.
+        # The preview is a data URI: Cloud's image media route returns 500,
+        # and the default st.image "auto" format silently re-encodes to JPEG.
         self.assertNotIn("native_image_share", source)
-        self.assertIn('st.image(artifact.png, width="stretch", output_format="PNG")', source)
+        self.assertNotIn("st.image(artifact.png", source)
+        self.assertIn("long_image_data_uri(artifact.png)", source)
+        self.assertIn("data:image/png;base64,", source)
+        self.assertIn('st.components.v1.html(component_html, height=62)', source)
+        self.assertIn('"保存 PNG"', source)
         self.assertIn("长按图片", source)
         self.assertIn('"下载 Markdown"', source)
         self.assertIn("to_markdown()", source)
@@ -259,7 +263,7 @@ class StreamlitEntrypointTests(unittest.TestCase):
         self.assertIn("revise_summary_with_feedback", source)
         self.assertIn("当前原文、摘要和上述反馈发送到 DeepSeek", source)
         self.assertLess(source.index('"按检查结果修订"'), source.index('with st.expander("手动编辑摘要'))
-        self.assertLess(source.index('with st.expander("手动编辑摘要'), source.index("st.image(artifact.png"))
+        self.assertLess(source.index('with st.expander("手动编辑摘要'), source.index("st.image(long_image_data_uri"))
 
     def test_summary_page_describes_literal_number_matching_honestly(self) -> None:
         source = (APP_ROOT / "pages" / "2_文章摘要.py").read_text(encoding="utf-8")
@@ -296,7 +300,8 @@ class StreamlitEntrypointTests(unittest.TestCase):
             pdf_source,
         )
         self.assertNotIn("result.mode}.pdf", pdf_source)
-        self.assertIn('file_name=f"{output_name}.summary.png"', summary_source)
+        self.assertIn('filename = f"{output_name}.summary.png"', summary_source)
+        self.assertIn("anchor.download = filename", summary_source)
         self.assertNotIn(".summary.pdf", summary_source)
 
 

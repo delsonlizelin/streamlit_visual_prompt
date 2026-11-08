@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib
 import json
@@ -143,20 +144,113 @@ def safe_filename(value: str) -> str:
     return (cleaned or "summary")[:100]
 
 
-def long_image_download_button(export: dict, *, key: str, stale: bool = False) -> None:
-    """Render the primary download action for the current long image."""
-    artifact = export["artifact"]
+def long_image_data_uri(png: bytes) -> str:
+    """Embed the PNG in the page so mobile Safari never fetches /media."""
+    return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+
+
+def long_image_actions(export: dict, *, stale: bool = False) -> None:
+    """Save or share the previewed PNG without another server media request.
+
+    Streamlit Cloud returns 500 for this app's image media URLs (including the
+    download button), so both actions reuse the data URI already rendered in
+    the preview. The component itself carries no image bytes.
+    """
     output_name = safe_filename(st.session_state.summary_output_name)
-    st.download_button(
-        "下载上一版 PNG 长图" if stale else "下载高清 PNG 长图",
-        data=artifact.png,
-        file_name=f"{output_name}.summary.png",
-        mime="image/png",
-        icon=":material/download:",
-        width="stretch",
-        on_click="ignore",
-        key=key,
+    filename = f"{output_name}.summary.png"
+    label = "保存上一版 PNG" if stale else "保存 PNG"
+    component_html = """
+      <style>
+        body {
+          margin: 0;
+          background: transparent;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+            "PingFang SC", "Noto Sans SC", sans-serif;
+        }
+        .actions { display: flex; gap: .5rem; }
+        button {
+          flex: 1 1 0;
+          min-height: 44px;
+          padding: .5rem .75rem;
+          border: 1px solid #b84316;
+          border-radius: 10px;
+          background: #b84316;
+          color: #fff;
+          font: 600 14px/1.3 inherit;
+          cursor: pointer;
+        }
+        button.secondary {
+          border-color: #d9dde0;
+          background: #fff;
+          color: #202327;
+        }
+        button:active { opacity: .85; }
+        p { margin: .35rem 0 0; color: #626971; font-size: 12px; }
+        p:empty { display: none; }
+      </style>
+      <div class="actions">
+        <button id="save" type="button">__LABEL__</button>
+        <button id="share" class="secondary" type="button">分享</button>
+      </div>
+      <p id="status" role="status" aria-live="polite"></p>
+      <script>
+        const filename = __FILENAME__;
+        const title = __TITLE__;
+        const status = document.getElementById("status");
+        const share = document.getElementById("share");
+        const source = () => {
+          try {
+            const img = window.parent.document.querySelector(
+              '[data-testid="stImage"] img'
+            );
+            return img && (img.currentSrc || img.src);
+          } catch (error) {
+            return "";
+          }
+        };
+        const download = () => {
+          const src = source();
+          if (!src) {
+            status.textContent = "图片尚未加载，请稍后再试。";
+            return;
+          }
+          const anchor = document.createElement("a");
+          anchor.href = src;
+          anchor.download = filename;
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          status.textContent = "";
+        };
+        document.getElementById("save").addEventListener("click", download);
+        if (typeof navigator.share !== "function" || typeof File !== "function") {
+          share.hidden = true;
+        } else {
+          share.addEventListener("click", async () => {
+            status.textContent = "";
+            try {
+              const src = source();
+              if (!src) throw new Error("image-not-ready");
+              const blob = await (await fetch(src)).blob();
+              const file = new File([blob], filename, { type: "image/png" });
+              if (navigator.canShare && !navigator.canShare({ files: [file] })) {
+                throw new Error("file-sharing-unavailable");
+              }
+              await navigator.share({ files: [file], title });
+            } catch (error) {
+              if (error && error.name === "AbortError") return;
+              download();
+            }
+          });
+        }
+      </script>
+    """
+    component_html = (
+        component_html.replace("__LABEL__", label)
+        .replace("__FILENAME__", json.dumps(filename, ensure_ascii=False))
+        .replace("__TITLE__", json.dumps("文章摘要长图", ensure_ascii=False))
     )
+    st.components.v1.html(component_html, height=62)
 
 
 def secret_value(name: str, default: str = "") -> str:
@@ -1075,14 +1169,7 @@ with proof_col:
         else:
             artifact = export["artifact"]
             output_name = safe_filename(st.session_state.summary_output_name)
-            if request_is_stale:
-                long_image_download_button(
-                    export,
-                    key="summary-export-download-inline",
-                    stale=True,
-                )
-            else:
-                long_image_download_button(export, key="summary-export-download-inline")
+            long_image_actions(export, stale=request_is_stale)
             st.download_button(
                 "下载 Markdown",
                 data=result.document.to_markdown().encode("utf-8"),
@@ -1098,12 +1185,12 @@ with proof_col:
                 + (
                     "这是上一版结果；可保留或下载，更新请重新生成。"
                     if request_is_stale
-                    else "可下载 PNG，或在手机上长按图片保存、转发。"
+                    else "可保存或分享 PNG，也可长按图片保存。"
                 )
             )
-            # Keep the preview a PNG: the default "auto" format re-encodes an
-            # opaque long image as JPEG, so long-press saves were not PNG.
-            st.image(artifact.png, width="stretch", output_format="PNG")
+            # A data URI keeps the preview a real PNG and avoids the broken
+            # /media image route on Streamlit Cloud; long-press saves are PNG.
+            st.image(long_image_data_uri(artifact.png), width="stretch")
 
         with st.expander("生成信息"):
             revision_count = int(st.session_state.get("summary_revision_count", 0))
